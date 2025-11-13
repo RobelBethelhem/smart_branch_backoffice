@@ -1,0 +1,56 @@
+{
+  accessorKey: 'till_id',
+  header: 'Till ID',
+  enableEditing: true,
+  Cell: ({ cell }) => cell.getValue(),
+  renderEditCell: ({ cell, row, column, table }) => (
+    <Autocomplete
+      value={cell.getValue() || ''}
+      onChange={(event, newValue) => {
+        table.options.meta?.updateData(row.index, column.id, newValue);
+      }}
+      options={tillIdData}
+      renderInput={(params) => (
+        <TextField
+          {...params}
+          variant="outlined"
+          placeholder="Select Till ID"
+          error={!!validationErrors?.till_id}
+          helperText={validationErrors?.till_id}
+          fullWidth
+        />
+      )}
+      autoHighlight
+      openOnFocus
+      clearOnBlur
+      selectOnFocus
+      sx={{ minWidth: 200 }}
+    />
+  ),
+  Filter: ({ column }) => (
+    <Autocomplete
+      onChange={(event, newValue) => {
+        column.setFilterValue(newValue || undefined);
+      }}
+      options={tillIdData}
+      renderInput={(params) => (
+        <TextField
+          {...params}
+          variant="standard"
+          placeholder="Filter Till ID"
+          InputProps={{
+            ...params.InputProps,
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon />
+              </InputAdornment>
+            ),
+          }}
+        />
+      )}
+      autoHighlight
+      clearOnEscape
+      sx={{ minWidth: 200 }}
+    />
+  ),
+}
