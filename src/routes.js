@@ -39,6 +39,9 @@ const BranchRecord = React.lazy(()=> import('./views/admin/Branch_Record/BranchR
 
 const Reassignment = React.lazy(() => import('./views/admin/Reassignment/Reassignment'));
 
+const BiometricRegistration = React.lazy(() => import('./views/admin/BiometricRegistration/BiometricRegistration'));
+const BiometricApproval = React.lazy(() => import('./views/admin/BiometricRegistration/BiometricApproval'));
+
 const User = React.lazy(()=> import('./views/user/User'));
 
 const System_User_Management = React.lazy(() => import('./views/admin/System_User_Management/systemUserManagement'))
@@ -96,6 +99,18 @@ const routes = [
     name: 'Assigned_To_Me',
     element: Assigned_To_Me,
     roles: ['Admin', 'Teller', 'Maker']
+  },
+  {
+    path: '/teller/biometric_registration',
+    name: 'Biometric Registration',
+    element: BiometricRegistration,
+    roles: ['Teller', 'Maker']
+  },
+  {
+    path: '/admin/biometric_approval',
+    name: 'Biometric Approval',
+    element: BiometricApproval,
+    roles: ['Admin']
   },
   {
     path: '/admin/experiance',

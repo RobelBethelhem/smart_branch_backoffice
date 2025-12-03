@@ -8,12 +8,13 @@ import {
   cilCursor,
   cilDescription,
   cilDrop,
+  cilFingerprint,
   cilNotes,
   cilPencil,
   cilPuzzle,
   cilSpeedometer,
   cilStar,
-  cilUserFemale 
+  cilUserFemale
 } from '@coreui/icons'
 import { CNavGroup, CNavItem, CNavTitle } from '@coreui/react'
 
@@ -89,7 +90,12 @@ const _nav = (userRole) => [
           name: 'Branch Record',
           to: '/admin/branch_record'
         },
-       
+        {
+          component: CNavItem,
+          name: 'Biometric Registration',
+          to: '/teller/biometric_registration'
+        },
+
       ],
     },
 
@@ -211,8 +217,13 @@ const _nav = (userRole) => [
           component: CNavItem,
           name: 'Reassignment',
           to: '/reassign'
+        },
+        {
+          component: CNavItem,
+          name: 'Biometric Approval',
+          to: '/admin/biometric_approval'
         }
-       
+
       ],
     },
 
