@@ -115,12 +115,18 @@ const _nav = (userRole) => [
       name: 'Authorizer',
       to: '/authorizer',
       icon: <CIcon icon={cilUserFemale} customClassName="nav-icon" />,
-      items: [ 
-        
+      items: [
+
         {
           component: CNavItem,
           name: 'Authorize',
           to: '/authorizer/authorize'
+        },
+
+        {
+          component: CNavItem,
+          name: 'Pending Checker Approval',
+          to: '/authorizer/pending_checker_approval'
         },
 
         {
@@ -134,7 +140,7 @@ const _nav = (userRole) => [
           name: 'Branch Record',
           to: '/admin/branch_record'
         },
-       
+
       ],
     },
 
@@ -227,6 +233,11 @@ const _nav = (userRole) => [
           component: CNavItem,
           name: 'Limit Management',
           to: '/admin/limit_management'
+        },
+        {
+          component: CNavItem,
+          name: 'Pending Checker Approval',
+          to: '/authorizer/pending_checker_approval'
         }
 
       ],

@@ -42,6 +42,7 @@ const Reassignment = React.lazy(() => import('./views/admin/Reassignment/Reassig
 const BiometricRegistration = React.lazy(() => import('./views/admin/BiometricRegistration/BiometricRegistration'));
 const BiometricApproval = React.lazy(() => import('./views/admin/BiometricRegistration/BiometricApproval'));
 const LimitManagement = React.lazy(() => import('./views/admin/LimitManagement/LimitManagement'));
+const PendingCheckerApproval = React.lazy(() => import('./views/admin/PendingCheckerApproval/PendingCheckerApproval'));
 
 const User = React.lazy(()=> import('./views/user/User'));
 
@@ -118,6 +119,12 @@ const routes = [
     name: 'Limit Management',
     element: LimitManagement,
     roles: ['Admin']
+  },
+  {
+    path: '/authorizer/pending_checker_approval',
+    name: 'Pending Checker Approval',
+    element: PendingCheckerApproval,
+    roles: ['Authorizer', 'Admin']
   },
   {
     path: '/admin/experiance',

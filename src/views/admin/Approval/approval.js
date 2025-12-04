@@ -1,13 +1,51 @@
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { MaterialReactTable, useMaterialReactTable } from 'material-react-table';
-import { Box, Tabs, Tab, Typography, Button, Dialog, DialogActions, DialogContent, DialogTitle, TextField } from '@mui/material';
-import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
+import {
+  Box, Tabs, Tab, Typography, Button, Dialog, DialogActions, DialogContent, DialogTitle, TextField,
+  Grid, Card, CardContent, Divider, InputAdornment, Chip, Alert, CircularProgress
+} from '@mui/material';
+import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { useSelector } from 'react-redux';
-import SendIcon from '@mui/icons-material/Send'; 
+import SendIcon from '@mui/icons-material/Send';
+import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
+import CalculateIcon from '@mui/icons-material/Calculate';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import WarningIcon from '@mui/icons-material/Warning';
 import { motion } from 'framer-motion';
 import DetailPanel from './DetailPanel'; // Adjust the path if necessary
+
+// Ethiopian Birr Denominations
+const DENOMINATIONS = [
+  { key: 'd200', label: '200 Birr', value: 200, type: 'note' },
+  { key: 'd100', label: '100 Birr', value: 100, type: 'note' },
+  { key: 'd50', label: '50 Birr', value: 50, type: 'note' },
+  { key: 'd10', label: '10 Birr', value: 10, type: 'note' },
+  { key: 'd5', label: '5 Birr', value: 5, type: 'note' },
+  { key: 'd1', label: '1 Birr', value: 1, type: 'note' },
+  { key: 'dc50', label: '50 Cent', value: 0.50, type: 'coin' },
+  { key: 'dc25', label: '25 Cent', value: 0.25, type: 'coin' },
+  { key: 'dc10', label: '10 Cent', value: 0.10, type: 'coin' },
+  { key: 'dc5', label: '5 Cent', value: 0.05, type: 'coin' },
+  { key: 'dc1', label: '1 Cent', value: 0.01, type: 'coin' },
+];
+
+// Calculate total from denomination
+const calculateDenominationTotal = (denomination) => {
+  if (!denomination) return 0;
+  return DENOMINATIONS.reduce((total, d) => {
+    return total + (denomination[d.key] || 0) * d.value;
+  }, 0);
+};
+
+// Initialize empty denomination
+const getEmptyDenomination = () => {
+  return DENOMINATIONS.reduce((acc, d) => {
+    acc[d.key] = 0;
+    return acc;
+  }, {});
+};
 
 const getRequestTypeColor = (type) => {
   switch (type?.toLowerCase()) {
@@ -26,6 +64,14 @@ const Example = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [transactionRef, setTransactionRef] = useState('');
   const accessToken = useSelector((state) => state.user.accessToken);
+  const userName = useSelector((state) => state.user.name);
+  const queryClientHook = useQueryClient();
+
+  // Denomination state for Deposit/Withdraw
+  const [denomination, setDenomination] = useState(getEmptyDenomination());
+  const [isAutoPopulating, setIsAutoPopulating] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedTransaction, setSelectedTransaction] = useState(null);
 
   const { data: fetchData = [], isError, isLoading } = useQuery({
     queryKey: ['transactions'],
@@ -45,15 +91,178 @@ const Example = () => {
   }, []);
 
   const handlePostSelectedTransactions = async () => {
+    const selectedTransactionIndex = Object.keys(rowSelection)[0];
+    const transaction = fetchData[parseInt(selectedTransactionIndex)];
+    setSelectedTransaction(transaction);
+    setDenomination(getEmptyDenomination());
+    setTransactionRef('');
     setIsDialogOpen(true);
   };
 
   const handleDialogClose = () => {
     setIsDialogOpen(false);
     setTransactionRef('');
+    setDenomination(getEmptyDenomination());
+    setSelectedTransaction(null);
   };
 
+  // Handle denomination input change
+  const handleDenominationChange = (key, value) => {
+    const numValue = parseInt(value) || 0;
+    setDenomination(prev => ({
+      ...prev,
+      [key]: Math.max(0, numValue)
+    }));
+  };
+
+  // Auto-populate denomination based on amount
+  const handleAutoPopulate = async () => {
+    if (!selectedTransaction) return;
+
+    setIsAutoPopulating(true);
+    try {
+      const response = await fetch('http://localhost:5000/api/zsmart_branch_requests/autopopulate-denomination', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-access-token': accessToken,
+        },
+        body: JSON.stringify({
+          amount: parseFloat(selectedTransaction.amount_in_figures)
+        }),
+      });
+
+      const result = await response.json();
+
+      if (response.ok && !result.error) {
+        setDenomination(result.data.denomination);
+        toast.success('Denomination auto-populated!', {
+          position: "top-right",
+          autoClose: 2000,
+          theme: "colored",
+        });
+      } else {
+        throw new Error(result.message || 'Failed to auto-populate denomination');
+      }
+    } catch (error) {
+      toast.error(error.message, {
+        position: "top-right",
+        autoClose: 3000,
+        theme: "colored",
+      });
+    } finally {
+      setIsAutoPopulating(false);
+    }
+  };
+
+  // Check if transaction is Deposit or Withdraw (needs denomination)
+  const needsDenomination = selectedTransaction?.transactionType?.toLowerCase() === 'deposit' ||
+                           selectedTransaction?.transactionType?.toLowerCase() === 'withdraw';
+
+  // Calculate denomination total
+  const denominationTotal = calculateDenominationTotal(denomination);
+  const expectedAmount = selectedTransaction ? parseFloat(selectedTransaction.amount_in_figures) : 0;
+  const denominationMatches = Math.abs(denominationTotal - expectedAmount) < 0.01;
+
   const handleDialogSubmit = async () => {
+    if (!selectedTransaction) return;
+
+    // Validate denomination for Deposit/Withdraw
+    if (needsDenomination && !denominationMatches) {
+      toast.error(`Denomination total (${denominationTotal.toFixed(2)}) does not match amount (${expectedAmount.toFixed(2)})`, {
+        position: "top-right",
+        autoClose: 3000,
+        theme: "colored",
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      let endpoint = 'http://localhost:5000/api/zsmart_branch_requests/transaction_posted';
+      let body = {
+        transaction_id: selectedTransaction._id,
+        trn_ref_no: transactionRef,
+      };
+
+      // Use denomination endpoint for Deposit/Withdraw
+      if (needsDenomination) {
+        const transactionType = selectedTransaction.transactionType.toLowerCase();
+        endpoint = `http://localhost:5000/api/zsmart_branch_requests/process-${transactionType}-with-denomination`;
+        body = {
+          [`${transactionType}_id`]: selectedTransaction._id,
+          denomination: denomination,
+          trn_ref_no: transactionRef,
+          posted_by: userName,
+        };
+      }
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-access-token': accessToken,
+        },
+        body: JSON.stringify(body),
+      });
+
+      const result = await response.json();
+
+      if (response.ok && !result.error) {
+        // Check if transaction needs checker approval
+        if (result.data?.needsChecker) {
+          toast.info(result.message || 'Transaction sent for checker approval', {
+            position: "top-right",
+            autoClose: 5000,
+            hideProgressBar: false,
+            closeOnClick: true,
+            pauseOnHover: true,
+            draggable: true,
+            theme: "colored",
+          });
+        } else {
+          toast.success('Transaction posted successfully!', {
+            position: "top-right",
+            autoClose: 3000,
+            hideProgressBar: false,
+            closeOnClick: true,
+            pauseOnHover: true,
+            draggable: true,
+            theme: "colored",
+          });
+        }
+
+        setRowSelection({});
+        queryClientHook.invalidateQueries(['transactions']);
+      } else {
+        throw new Error(result.message || 'Failed to post transaction');
+      }
+    } catch (error) {
+      toast.error(error.message, {
+        position: "top-right",
+        autoClose: 3000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+        theme: "colored",
+      });
+    } finally {
+      setIsSubmitting(false);
+      handleDialogClose();
+    }
+  };
+
+  /* ==== COMMENTED OUT - OLD IMPLEMENTATION ====
+  // The previous implementation without denomination support
+  // Keeping for reference and backwards compatibility
+
+  const handlePostSelectedTransactionsOld = async () => {
+    setIsDialogOpen(true);
+  };
+
+  const handleDialogSubmitOld = async () => {
     const selectedTransactionIndex = Object.keys(rowSelection)[0];
     const selectedTransaction = fetchData[parseInt(selectedTransactionIndex)];
 
@@ -73,37 +282,19 @@ const Example = () => {
       const result = await response.json();
 
       if (response.ok) {
-        toast.success('Transaction posted successfully!', {
-          position: "top-right",
-          autoClose: 3000,
-          hideProgressBar: false,
-          closeOnClick: true,
-          pauseOnHover: true,
-          draggable: true,
-          progress: undefined,
-          theme: "colored",
-        });
-
+        toast.success('Transaction posted successfully!');
         setRowSelection({});
         queryClient.invalidateQueries(['transactions']);
       } else {
         throw new Error(result.message || 'Failed to post transaction');
       }
     } catch (error) {
-      toast.error(error.message, {
-        position: "top-right",
-        autoClose: 3000,
-        hideProgressBar: false,
-        closeOnClick: true,
-        pauseOnHover: true,
-        draggable: true,
-        progress: undefined,
-        theme: "colored",
-      });
+      toast.error(error.message);
     } finally {
       handleDialogClose();
     }
   };
+  ==== END OF OLD IMPLEMENTATION ==== */
 
   const columns = useMemo(() => [
     {
@@ -232,6 +423,162 @@ const Example = () => {
         entranceDirection={entranceDirection}
       />
 
+      <Dialog
+        open={isDialogOpen}
+        onClose={handleDialogClose}
+        maxWidth={needsDenomination ? "md" : "sm"}
+        fullWidth
+      >
+        <DialogTitle sx={{ bgcolor: 'primary.main', color: 'white' }}>
+          Post {selectedTransaction?.transactionType || 'Transaction'}
+          {selectedTransaction && (
+            <Typography variant="subtitle2" sx={{ opacity: 0.9 }}>
+              Account: {selectedTransaction.account_number} | Amount: {parseFloat(selectedTransaction.amount_in_figures).toLocaleString('en-ET', { style: 'currency', currency: 'ETB' })}
+            </Typography>
+          )}
+        </DialogTitle>
+        <DialogContent sx={{ mt: 2 }}>
+          {/* Show denomination fields for Deposit/Withdraw */}
+          {needsDenomination && (
+            <>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, mt: 1 }}>
+                <Typography variant="h6">Cash Denomination</Typography>
+                <Button
+                  variant="outlined"
+                  startIcon={isAutoPopulating ? <CircularProgress size={16} /> : <AutoFixHighIcon />}
+                  onClick={handleAutoPopulate}
+                  disabled={isAutoPopulating}
+                  size="small"
+                >
+                  Auto-Populate
+                </Button>
+              </Box>
+
+              {/* Notes Section */}
+              <Typography variant="subtitle2" sx={{ mb: 1, color: 'text.secondary' }}>
+                Notes (Birr)
+              </Typography>
+              <Grid container spacing={2} sx={{ mb: 2 }}>
+                {DENOMINATIONS.filter(d => d.type === 'note').map(denom => (
+                  <Grid item xs={4} sm={2} key={denom.key}>
+                    <TextField
+                      label={denom.label}
+                      type="number"
+                      size="small"
+                      fullWidth
+                      value={denomination[denom.key] || ''}
+                      onChange={(e) => handleDenominationChange(denom.key, e.target.value)}
+                      InputProps={{
+                        inputProps: { min: 0 }
+                      }}
+                      sx={{
+                        '& .MuiInputBase-input': { textAlign: 'center' }
+                      }}
+                    />
+                    <Typography variant="caption" sx={{ display: 'block', textAlign: 'center', color: 'text.secondary' }}>
+                      = {((denomination[denom.key] || 0) * denom.value).toLocaleString()}
+                    </Typography>
+                  </Grid>
+                ))}
+              </Grid>
+
+              {/* Coins Section */}
+              <Typography variant="subtitle2" sx={{ mb: 1, color: 'text.secondary' }}>
+                Coins (Cents)
+              </Typography>
+              <Grid container spacing={2} sx={{ mb: 2 }}>
+                {DENOMINATIONS.filter(d => d.type === 'coin').map(denom => (
+                  <Grid item xs={4} sm={2.4} key={denom.key}>
+                    <TextField
+                      label={denom.label}
+                      type="number"
+                      size="small"
+                      fullWidth
+                      value={denomination[denom.key] || ''}
+                      onChange={(e) => handleDenominationChange(denom.key, e.target.value)}
+                      InputProps={{
+                        inputProps: { min: 0 }
+                      }}
+                      sx={{
+                        '& .MuiInputBase-input': { textAlign: 'center' }
+                      }}
+                    />
+                    <Typography variant="caption" sx={{ display: 'block', textAlign: 'center', color: 'text.secondary' }}>
+                      = {((denomination[denom.key] || 0) * denom.value).toFixed(2)}
+                    </Typography>
+                  </Grid>
+                ))}
+              </Grid>
+
+              <Divider sx={{ my: 2 }} />
+
+              {/* Total Summary */}
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Box>
+                  <Typography variant="body2" color="text.secondary">Denomination Total</Typography>
+                  <Typography variant="h5" fontWeight="bold" color={denominationMatches ? 'success.main' : 'error.main'}>
+                    {denominationTotal.toLocaleString('en-ET', { style: 'currency', currency: 'ETB' })}
+                  </Typography>
+                </Box>
+                <Box sx={{ textAlign: 'right' }}>
+                  <Typography variant="body2" color="text.secondary">Expected Amount</Typography>
+                  <Typography variant="h5" fontWeight="bold">
+                    {expectedAmount.toLocaleString('en-ET', { style: 'currency', currency: 'ETB' })}
+                  </Typography>
+                </Box>
+                <Box>
+                  {denominationMatches ? (
+                    <Chip icon={<CheckCircleIcon />} label="Match" color="success" />
+                  ) : (
+                    <Chip
+                      icon={<WarningIcon />}
+                      label={`Diff: ${Math.abs(denominationTotal - expectedAmount).toFixed(2)}`}
+                      color="error"
+                    />
+                  )}
+                </Box>
+              </Box>
+
+              <Divider sx={{ my: 2 }} />
+            </>
+          )}
+
+          {/* Transaction Reference Number */}
+          <TextField
+            autoFocus={!needsDenomination}
+            margin="dense"
+            label="Transaction Reference Number"
+            type="text"
+            fullWidth
+            value={transactionRef}
+            onChange={(e) => setTransactionRef(e.target.value)}
+            helperText="Optional - Will be auto-generated if not provided"
+          />
+
+          {/* Warning for invalid denomination */}
+          {needsDenomination && !denominationMatches && denominationTotal > 0 && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              Denomination total does not match the transaction amount. Please adjust the denomination counts.
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={handleDialogClose} disabled={isSubmitting}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleDialogSubmit}
+            variant="contained"
+            color="primary"
+            disabled={isSubmitting || (needsDenomination && !denominationMatches)}
+            startIcon={isSubmitting ? <CircularProgress size={16} /> : <SendIcon />}
+          >
+            {isSubmitting ? 'Processing...' : 'Post Transaction'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ==== COMMENTED OUT - OLD DIALOG ====
       <Dialog open={isDialogOpen} onClose={handleDialogClose}>
         <DialogTitle>Enter Transaction Reference Number</DialogTitle>
         <DialogContent>
@@ -252,6 +599,7 @@ const Example = () => {
           </Button>
         </DialogActions>
       </Dialog>
+      ==== END OF OLD DIALOG ==== */}
 
       <ToastContainer 
         position="top-right" 
