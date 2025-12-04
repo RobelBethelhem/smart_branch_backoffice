@@ -222,6 +222,11 @@ const _nav = (userRole) => [
           component: CNavItem,
           name: 'Biometric Approval',
           to: '/admin/biometric_approval'
+        },
+        {
+          component: CNavItem,
+          name: 'Limit Management',
+          to: '/admin/limit_management'
         }
 
       ],

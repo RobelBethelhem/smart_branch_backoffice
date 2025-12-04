@@ -41,6 +41,7 @@ const Reassignment = React.lazy(() => import('./views/admin/Reassignment/Reassig
 
 const BiometricRegistration = React.lazy(() => import('./views/admin/BiometricRegistration/BiometricRegistration'));
 const BiometricApproval = React.lazy(() => import('./views/admin/BiometricRegistration/BiometricApproval'));
+const LimitManagement = React.lazy(() => import('./views/admin/LimitManagement/LimitManagement'));
 
 const User = React.lazy(()=> import('./views/user/User'));
 
@@ -110,6 +111,12 @@ const routes = [
     path: '/admin/biometric_approval',
     name: 'Biometric Approval',
     element: BiometricApproval,
+    roles: ['Admin']
+  },
+  {
+    path: '/admin/limit_management',
+    name: 'Limit Management',
+    element: LimitManagement,
     roles: ['Admin']
   },
   {
