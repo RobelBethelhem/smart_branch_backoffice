@@ -73,6 +73,11 @@ const Example = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState(null);
 
+  // Till balance state
+  const [tillBalance, setTillBalance] = useState(null);
+  const [isLoadingTill, setIsLoadingTill] = useState(false);
+  const [tillError, setTillError] = useState(null);
+
   const { data: fetchData = [], isError, isLoading } = useQuery({
     queryKey: ['transactions'],
     queryFn: async () => {
@@ -90,13 +95,52 @@ const Example = () => {
     setSelectedDetail(data);
   }, []);
 
+  // Fetch till denominations
+  const fetchTillBalance = async () => {
+    setIsLoadingTill(true);
+    setTillError(null);
+    try {
+      const response = await fetch('http://localhost:5000/api/zsmart_branch_requests/get_till_denominations', {
+        headers: {
+          'Content-Type': 'application/json',
+          'x-access-token': accessToken,
+        },
+      });
+      const result = await response.json();
+
+      if (response.ok && !result.error) {
+        setTillBalance(result.data);
+      } else {
+        setTillError(result.message || 'Failed to fetch till balance');
+      }
+    } catch (error) {
+      setTillError(error.message);
+    } finally {
+      setIsLoadingTill(false);
+    }
+  };
+
+  // Calculate total till balance
+  const calculateTillTotal = () => {
+    if (!tillBalance?.denominations) return 0;
+    return DENOMINATIONS.reduce((total, d) => {
+      const count = tillBalance.denominations[d.key] || 0;
+      return total + count * d.value;
+    }, 0);
+  };
+
   const handlePostSelectedTransactions = async () => {
     const selectedTransactionIndex = Object.keys(rowSelection)[0];
     const transaction = fetchData[parseInt(selectedTransactionIndex)];
     setSelectedTransaction(transaction);
     setDenomination(getEmptyDenomination());
     setTransactionRef('');
+    setTillBalance(null);
+    setTillError(null);
     setIsDialogOpen(true);
+
+    // Fetch till balance when dialog opens
+    fetchTillBalance();
   };
 
   const handleDialogClose = () => {
@@ -104,24 +148,48 @@ const Example = () => {
     setTransactionRef('');
     setDenomination(getEmptyDenomination());
     setSelectedTransaction(null);
+    setTillBalance(null);
+    setTillError(null);
   };
 
-  // Handle denomination input change
+  // Handle denomination input change with validation for withdraw
   const handleDenominationChange = (key, value) => {
     const numValue = parseInt(value) || 0;
+    const isWithdraw = selectedTransaction?.transactionType?.toLowerCase() === 'withdraw';
+
+    // For withdraw, limit to available count
+    let maxValue = numValue;
+    if (isWithdraw && tillBalance?.denominations) {
+      const available = tillBalance.denominations[key] || 0;
+      maxValue = Math.min(numValue, available);
+    }
+
     setDenomination(prev => ({
       ...prev,
-      [key]: Math.max(0, numValue)
+      [key]: Math.max(0, maxValue)
     }));
   };
 
-  // Auto-populate denomination based on amount
+  // Check if withdraw exceeds available for any denomination
+  const getWithdrawExceededDenoms = () => {
+    if (!tillBalance?.denominations) return [];
+    const isWithdraw = selectedTransaction?.transactionType?.toLowerCase() === 'withdraw';
+    if (!isWithdraw) return [];
+
+    return DENOMINATIONS.filter(d => {
+      const requested = denomination[d.key] || 0;
+      const available = tillBalance.denominations[d.key] || 0;
+      return requested > available;
+    });
+  };
+
+  // Auto-populate denomination based on amount (uses till balance for withdraw)
   const handleAutoPopulate = async () => {
     if (!selectedTransaction) return;
 
     setIsAutoPopulating(true);
     try {
-      const response = await fetch('http://localhost:5000/api/zsmart_branch_requests/autopopulate-denomination', {
+      const response = await fetch('http://localhost:5000/api/zsmart_branch_requests/autopopulate_denomination', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -136,11 +204,24 @@ const Example = () => {
 
       if (response.ok && !result.error) {
         setDenomination(result.data.denomination);
-        toast.success('Denomination auto-populated!', {
-          position: "top-right",
-          autoClose: 2000,
-          theme: "colored",
-        });
+
+        // Show warning if can't fulfill (for withdraw)
+        if (result.data.warning) {
+          toast.warning(result.data.warning, {
+            position: "top-right",
+            autoClose: 5000,
+            theme: "colored",
+          });
+        } else {
+          toast.success('Denomination auto-populated!', {
+            position: "top-right",
+            autoClose: 2000,
+            theme: "colored",
+          });
+        }
+
+        // Refresh till balance after auto-populate
+        fetchTillBalance();
       } else {
         throw new Error(result.message || 'Failed to auto-populate denomination');
       }
@@ -441,13 +522,48 @@ const Example = () => {
           {/* Show denomination fields for Deposit/Withdraw */}
           {needsDenomination && (
             <>
+              {/* Till Balance Summary Card */}
+              <Card sx={{ mb: 2, bgcolor: 'grey.50' }}>
+                <CardContent sx={{ py: 1.5 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Box>
+                      <Typography variant="caption" color="text.secondary">Your Till Balance</Typography>
+                      {isLoadingTill ? (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <CircularProgress size={16} />
+                          <Typography variant="body2">Loading...</Typography>
+                        </Box>
+                      ) : tillError ? (
+                        <Typography variant="body2" color="error">{tillError}</Typography>
+                      ) : (
+                        <Typography variant="h6" fontWeight="bold" color="primary.main">
+                          {calculateTillTotal().toLocaleString('en-ET', { style: 'currency', currency: 'ETB' })}
+                        </Typography>
+                      )}
+                    </Box>
+                    <Box sx={{ textAlign: 'right' }}>
+                      <Typography variant="caption" color="text.secondary">Till ID</Typography>
+                      <Typography variant="body2" fontWeight="medium">
+                        {tillBalance?.tillId || '-'}
+                      </Typography>
+                    </Box>
+                    <Box sx={{ textAlign: 'right' }}>
+                      <Typography variant="caption" color="text.secondary">Branch</Typography>
+                      <Typography variant="body2" fontWeight="medium">
+                        {tillBalance?.branchCode || '-'}
+                      </Typography>
+                    </Box>
+                  </Box>
+                </CardContent>
+              </Card>
+
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, mt: 1 }}>
                 <Typography variant="h6">Cash Denomination</Typography>
                 <Button
                   variant="outlined"
                   startIcon={isAutoPopulating ? <CircularProgress size={16} /> : <AutoFixHighIcon />}
                   onClick={handleAutoPopulate}
-                  disabled={isAutoPopulating}
+                  disabled={isAutoPopulating || isLoadingTill}
                   size="small"
                 >
                   Auto-Populate
@@ -459,27 +575,47 @@ const Example = () => {
                 Notes (Birr)
               </Typography>
               <Grid container spacing={2} sx={{ mb: 2 }}>
-                {DENOMINATIONS.filter(d => d.type === 'note').map(denom => (
-                  <Grid item xs={4} sm={2} key={denom.key}>
-                    <TextField
-                      label={denom.label}
-                      type="number"
-                      size="small"
-                      fullWidth
-                      value={denomination[denom.key] || ''}
-                      onChange={(e) => handleDenominationChange(denom.key, e.target.value)}
-                      InputProps={{
-                        inputProps: { min: 0 }
-                      }}
-                      sx={{
-                        '& .MuiInputBase-input': { textAlign: 'center' }
-                      }}
-                    />
-                    <Typography variant="caption" sx={{ display: 'block', textAlign: 'center', color: 'text.secondary' }}>
-                      = {((denomination[denom.key] || 0) * denom.value).toLocaleString()}
-                    </Typography>
-                  </Grid>
-                ))}
+                {DENOMINATIONS.filter(d => d.type === 'note').map(denom => {
+                  const available = tillBalance?.denominations?.[denom.key] || 0;
+                  const isWithdraw = selectedTransaction?.transactionType?.toLowerCase() === 'withdraw';
+                  const exceedsAvailable = isWithdraw && (denomination[denom.key] || 0) > available;
+
+                  return (
+                    <Grid item xs={4} sm={2} key={denom.key}>
+                      <TextField
+                        label={denom.label}
+                        type="number"
+                        size="small"
+                        fullWidth
+                        value={denomination[denom.key] || ''}
+                        onChange={(e) => handleDenominationChange(denom.key, e.target.value)}
+                        error={exceedsAvailable}
+                        InputProps={{
+                          inputProps: { min: 0, max: isWithdraw ? available : undefined }
+                        }}
+                        sx={{
+                          '& .MuiInputBase-input': { textAlign: 'center' }
+                        }}
+                      />
+                      <Typography variant="caption" sx={{ display: 'block', textAlign: 'center', color: 'text.secondary' }}>
+                        = {((denomination[denom.key] || 0) * denom.value).toLocaleString()}
+                      </Typography>
+                      {tillBalance && (
+                        <Typography
+                          variant="caption"
+                          sx={{
+                            display: 'block',
+                            textAlign: 'center',
+                            color: exceedsAvailable ? 'error.main' : 'success.main',
+                            fontWeight: 'medium'
+                          }}
+                        >
+                          Avail: {available}
+                        </Typography>
+                      )}
+                    </Grid>
+                  );
+                })}
               </Grid>
 
               {/* Coins Section */}
@@ -487,27 +623,47 @@ const Example = () => {
                 Coins (Cents)
               </Typography>
               <Grid container spacing={2} sx={{ mb: 2 }}>
-                {DENOMINATIONS.filter(d => d.type === 'coin').map(denom => (
-                  <Grid item xs={4} sm={2.4} key={denom.key}>
-                    <TextField
-                      label={denom.label}
-                      type="number"
-                      size="small"
-                      fullWidth
-                      value={denomination[denom.key] || ''}
-                      onChange={(e) => handleDenominationChange(denom.key, e.target.value)}
-                      InputProps={{
-                        inputProps: { min: 0 }
-                      }}
-                      sx={{
-                        '& .MuiInputBase-input': { textAlign: 'center' }
-                      }}
-                    />
-                    <Typography variant="caption" sx={{ display: 'block', textAlign: 'center', color: 'text.secondary' }}>
-                      = {((denomination[denom.key] || 0) * denom.value).toFixed(2)}
-                    </Typography>
-                  </Grid>
-                ))}
+                {DENOMINATIONS.filter(d => d.type === 'coin').map(denom => {
+                  const available = tillBalance?.denominations?.[denom.key] || 0;
+                  const isWithdraw = selectedTransaction?.transactionType?.toLowerCase() === 'withdraw';
+                  const exceedsAvailable = isWithdraw && (denomination[denom.key] || 0) > available;
+
+                  return (
+                    <Grid item xs={4} sm={2.4} key={denom.key}>
+                      <TextField
+                        label={denom.label}
+                        type="number"
+                        size="small"
+                        fullWidth
+                        value={denomination[denom.key] || ''}
+                        onChange={(e) => handleDenominationChange(denom.key, e.target.value)}
+                        error={exceedsAvailable}
+                        InputProps={{
+                          inputProps: { min: 0, max: isWithdraw ? available : undefined }
+                        }}
+                        sx={{
+                          '& .MuiInputBase-input': { textAlign: 'center' }
+                        }}
+                      />
+                      <Typography variant="caption" sx={{ display: 'block', textAlign: 'center', color: 'text.secondary' }}>
+                        = {((denomination[denom.key] || 0) * denom.value).toFixed(2)}
+                      </Typography>
+                      {tillBalance && (
+                        <Typography
+                          variant="caption"
+                          sx={{
+                            display: 'block',
+                            textAlign: 'center',
+                            color: exceedsAvailable ? 'error.main' : 'success.main',
+                            fontWeight: 'medium'
+                          }}
+                        >
+                          Avail: {available}
+                        </Typography>
+                      )}
+                    </Grid>
+                  );
+                })}
               </Grid>
 
               <Divider sx={{ my: 2 }} />
