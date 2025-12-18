@@ -152,10 +152,10 @@ const Example = () => {
     setTillError(null);
   };
 
-  // Handle denomination input change with validation for withdraw
+  // Handle denomination input change with validation for withdraw and echeck
   const handleDenominationChange = (key, value) => {
     const numValue = parseInt(value) || 0;
-    const isWithdraw = selectedTransaction?.transactionType?.toLowerCase() === 'withdraw';
+    const isWithdraw = ['withdraw', 'echeck'].includes(selectedTransaction?.transactionType?.toLowerCase());
 
     // For withdraw, limit to available count
     let maxValue = numValue;
@@ -170,10 +170,10 @@ const Example = () => {
     }));
   };
 
-  // Check if withdraw exceeds available for any denomination
+  // Check if withdraw/echeck exceeds available for any denomination
   const getWithdrawExceededDenoms = () => {
     if (!tillBalance?.denominations) return [];
-    const isWithdraw = selectedTransaction?.transactionType?.toLowerCase() === 'withdraw';
+    const isWithdraw = ['withdraw', 'echeck'].includes(selectedTransaction?.transactionType?.toLowerCase());
     if (!isWithdraw) return [];
 
     return DENOMINATIONS.filter(d => {
@@ -236,9 +236,8 @@ const Example = () => {
     }
   };
 
-  // Check if transaction is Deposit or Withdraw (needs denomination)
-  const needsDenomination = selectedTransaction?.transactionType?.toLowerCase() === 'deposit' ||
-                           selectedTransaction?.transactionType?.toLowerCase() === 'withdraw';
+  // Check if transaction is Deposit, Withdraw, or E-Check (needs denomination)
+  const needsDenomination = ['deposit', 'withdraw', 'echeck'].includes(selectedTransaction?.transactionType?.toLowerCase());
 
   // Calculate denomination total
   const denominationTotal = calculateDenominationTotal(denomination);
@@ -513,9 +512,16 @@ const Example = () => {
         <DialogTitle sx={{ bgcolor: 'primary.main', color: 'white' }}>
           Post {selectedTransaction?.transactionType || 'Transaction'}
           {selectedTransaction && (
-            <Typography variant="subtitle2" sx={{ opacity: 0.9 }}>
-              Account: {selectedTransaction.account_number} | Amount: {parseFloat(selectedTransaction.amount_in_figures).toLocaleString('en-ET', { style: 'currency', currency: 'ETB' })}
-            </Typography>
+            <>
+              <Typography variant="subtitle2" sx={{ opacity: 0.9 }}>
+                Account: {selectedTransaction.account_number} | Amount: {parseFloat(selectedTransaction.amount_in_figures).toLocaleString('en-ET', { style: 'currency', currency: 'ETB' })}
+              </Typography>
+              {selectedTransaction.transactionType?.toLowerCase() === 'echeck' && (
+                <Typography variant="subtitle2" sx={{ opacity: 0.9, mt: 0.5 }}>
+                  Recipient: {selectedTransaction.recipient_full_name} ({selectedTransaction.recipient_phone_number})
+                </Typography>
+              )}
+            </>
           )}
         </DialogTitle>
         <DialogContent sx={{ mt: 2 }}>
@@ -577,7 +583,7 @@ const Example = () => {
               <Grid container spacing={2} sx={{ mb: 2 }}>
                 {DENOMINATIONS.filter(d => d.type === 'note').map(denom => {
                   const available = tillBalance?.denominations?.[denom.key] || 0;
-                  const isWithdraw = selectedTransaction?.transactionType?.toLowerCase() === 'withdraw';
+                  const isWithdraw = ['withdraw', 'echeck'].includes(selectedTransaction?.transactionType?.toLowerCase());
                   const exceedsAvailable = isWithdraw && (denomination[denom.key] || 0) > available;
 
                   return (
@@ -625,7 +631,7 @@ const Example = () => {
               <Grid container spacing={2} sx={{ mb: 2 }}>
                 {DENOMINATIONS.filter(d => d.type === 'coin').map(denom => {
                   const available = tillBalance?.denominations?.[denom.key] || 0;
-                  const isWithdraw = selectedTransaction?.transactionType?.toLowerCase() === 'withdraw';
+                  const isWithdraw = ['withdraw', 'echeck'].includes(selectedTransaction?.transactionType?.toLowerCase());
                   const exceedsAvailable = isWithdraw && (denomination[denom.key] || 0) > available;
 
                   return (
