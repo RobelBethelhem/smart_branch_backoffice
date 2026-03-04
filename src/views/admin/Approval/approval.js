@@ -265,13 +265,21 @@ const Example = () => {
         transaction_id: selectedTransaction._id,
       };
 
-      // Use denomination endpoint for Deposit/Withdraw
+      // Use denomination endpoint for Deposit/Withdraw/ECheck
       if (needsDenomination) {
         const transactionType = selectedTransaction.transactionType.toLowerCase();
         endpoint = `http://localhost:5000/api/zsmart_branch_requests/process-${transactionType}-with-denomination`;
         body = {
           [`${transactionType}_id`]: selectedTransaction._id,
           denomination: denomination,
+          posted_by: userName,
+        };
+      }
+      // Transfer: call process-transfer directly (no denomination needed, integrates with Flexcube)
+      else if (selectedTransaction?.transactionType?.toLowerCase() === 'transfer') {
+        endpoint = 'http://localhost:5000/api/zsmart_branch_requests/process-transfer';
+        body = {
+          transfer_id: selectedTransaction._id,
           posted_by: userName,
         };
       }
