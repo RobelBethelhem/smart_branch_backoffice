@@ -210,7 +210,11 @@ const Example = () => {
       fetchURL.searchParams.set('globalFilter', globalFilter ?? '');
       fetchURL.searchParams.set('sorting', JSON.stringify(sorting ?? []));
 
-      const response = await fetch(fetchURL.href);
+      const response = await fetch(fetchURL.href, {
+        headers: {
+          'x-access-token': getAccessToken(),
+        },
+      });
       const json = await response.json();
     
       return json;
@@ -530,6 +534,14 @@ const Example = () => {
   );
 };
 
+function getAccessToken() {
+  try {
+    const persisted = JSON.parse(sessionStorage.getItem('persist:root') || '{}');
+    const userState = JSON.parse(persisted.user || '{}');
+    return userState.accessToken || '';
+  } catch { return ''; }
+}
+
 function useCreateUser(refetch) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -539,6 +551,7 @@ function useCreateUser(refetch) {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "x-access-token": getAccessToken(),
         },
         body: JSON.stringify(user)
       });
@@ -577,6 +590,7 @@ function useUpdateUser() {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
+          "x-access-token": getAccessToken(),
         },
         body: JSON.stringify(user)
       });
@@ -614,6 +628,7 @@ function useDeleteUser(refetch) {
         method: "Delete",
         headers: {
           "Content-Type": "application/json",
+          "x-access-token": getAccessToken(),
         },
         body: JSON.stringify({id: userId})
       });
