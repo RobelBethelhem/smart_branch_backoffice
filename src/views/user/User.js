@@ -559,7 +559,7 @@ const Example = () => {
 
   const { mutateAsync: createUser, isPending: isCreatingUser } = useCreateUser(refetch);
   const { mutateAsync: updateUser, isPending: isUpdatingUser } = useUpdateUser();
-  const { mutateAsync: deleteUser, isPending: isDeletingUser } = useDeleteUser(refetch);
+  const { mutateAsync: deleteUser, isPending: isDeletingUser } = useDeleteUser(refetch, accessToken);
 
   const handleCreateUserSubmit = async (userData) => {
     try {
@@ -792,12 +792,14 @@ function useCreateUser(refetch) {
 // Custom Hook to Update User
 function useUpdateUser() {
   const queryClient = useQueryClient();
+  const accessToken = useSelector((state) => state.user.accessToken);
   return useMutation({
     mutationFn: async (user) => {
       const response = await fetch('/api/api/editUser/', {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
+          'x-access-token': accessToken,
         },
         body: JSON.stringify(user),
       });
@@ -825,7 +827,7 @@ function useUpdateUser() {
 }
 
 // Custom Hook to Delete User
-function useDeleteUser(refetch) {
+function useDeleteUser(refetch, accessToken) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (userId) => {
@@ -833,6 +835,7 @@ function useDeleteUser(refetch) {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
+          'x-access-token': accessToken,
         },
         body: JSON.stringify({ id: userId }),
       });
