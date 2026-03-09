@@ -535,13 +535,14 @@ const BranchRecord = () => {
               enableGrouping
               muiTableBodyRowProps={({ row }) => ({
                 onClick: () => {
-                  if (row.original.status === 'authorized') {
+                  const status = row.original.status;
+                  if (status === 'authorized' || status === 'posted') {
                     setRowSelection((prev) => ({ [row.id]: !prev[row.id] }));
                   }
                 },
                 selected: rowSelection[row.id],
                 style: {
-                  cursor: row.original.status === 'authorized' ? 'pointer' : 'not-allowed',
+                  cursor: (row.original.status === 'authorized' || row.original.status === 'posted') ? 'pointer' : 'not-allowed',
                   backgroundColor: rowSelection[row.id] ? '#e0f7fa' : 'inherit',
                 },
               })}
