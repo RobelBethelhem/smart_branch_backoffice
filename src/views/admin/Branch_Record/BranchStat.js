@@ -1,482 +1,366 @@
-import React, { useEffect, useState } from 'react';
-import './BranchStat.css'; // CSS for styling
+import React, { useMemo, useState } from 'react';
+import './BranchStat.css';
 import { Bar, Pie, Doughnut } from 'react-chartjs-2';
-import { 
-  Chart as ChartJS, 
-  CategoryScale, 
-  LinearScale, 
-  BarElement, 
-  ArcElement, 
-  Tooltip, 
-  Legend 
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  ArcElement,
+  Tooltip as ChartTooltip,
+  Legend as ChartLegend,
 } from 'chart.js';
-import { useSelector } from 'react-redux';
-import { TextField, Button, Box } from '@mui/material';
+import {
+  TextField, Button, Box, Typography, Paper, Grid, Skeleton,
+} from '@mui/material';
+import {
+  AccessTime as AccessTimeIcon,
+  TrendingUp as TrendingUpIcon,
+  TrendingDown as TrendingDownIcon,
+  Receipt as ReceiptIcon,
+  AttachMoney as AttachMoneyIcon,
+  Schedule as ScheduleIcon,
+} from '@mui/icons-material';
+import { motion } from 'framer-motion';
 import { format } from 'date-fns';
 
-// Register Chart.js components
-ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Tooltip, Legend);
+ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, ChartTooltip, ChartLegend);
 
-const BranchStat = () => {
-  const [data, setData] = useState(null);
-  const [waitingTimes, setWaitingTimes] = useState([]);
-  const [busyHours, setBusyHours] = useState({});
-  const [busyDays, setBusyDays] = useState({});
-  const [transactionTypeCounts, setTransactionTypeCounts] = useState({});
-  const [transactionStatusCounts, setTransactionStatusCounts] = useState({});
-  const [additionalStats, setAdditionalStats] = useState({});
-  const accessToken = useSelector((state) => state.user.accessToken);
+const CHART_COLORS = ['#3498db', '#2ecc71', '#e74c3c', '#f39c12', '#9b59b6', '#1abc9c', '#e67e22', '#34495e'];
 
-  // Date Range States
+const formatCurrency = (amount) => {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'ETB', maximumFractionDigits: 0 }).format(amount);
+};
+
+// Mini stat card
+const MiniCard = ({ title, value, icon, color, delay = 0 }) => (
+  <Grid item xs={6} sm={4} md={3} lg={2.4}>
+    <motion.div
+      initial={{ opacity: 0, y: 15 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, delay }}
+    >
+      <Paper sx={{
+        p: 2.5, borderRadius: 2, textAlign: 'center',
+        borderTop: `3px solid ${color}`,
+        '&:hover': { transform: 'translateY(-3px)', boxShadow: '0 6px 20px rgba(0,0,0,0.1)' },
+        transition: 'all 0.3s ease',
+      }}>
+        <Box sx={{ color, mb: 1 }}>{icon}</Box>
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>{title}</Typography>
+        <Typography variant="h6" sx={{ fontWeight: 700 }}>{value}</Typography>
+      </Paper>
+    </motion.div>
+  </Grid>
+);
+
+const BranchStat = ({ transactions = [], branchCode = '', isLoading = false }) => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
-  useEffect(() => {
-    // Fetch data from backend API whenever startDate or endDate changes
-    fetchBranchData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [startDate, endDate]);
-
-  const fetchBranchData = () => {
-    // Construct the fetch URL with query parameters if dates are selected
-    let url = 'http://localhost:5000/api/zsmart_branch_requests/branch_transactions';
-    const params = [];
-    if (startDate) params.push(`start=${startDate}`);
-    if (endDate) params.push(`end=${endDate}`);
-    if (params.length > 0) {
-      url += `?${params.join('&')}`;
-    }
-
-    fetch(url, {
-      headers: { 
-        'Content-Type': 'application/json', 
-        'x-access-token': accessToken 
-      },
-    })
-      .then(response => response.json())
-      .then(json => {
-        if (!json.error) {
-          setData(json.data);
-          processStatistics(json.data);
-        }
-      })
-      .catch(error => console.error('Error fetching branch statistics:', error));
-  };
-
-  const processStatistics = (data) => {
-    // Calculate waiting times in minutes based on request_date and assigned_date
-    const times = data.transactions.map(tx => {
-      const requestDate = new Date(tx.request_date);
-      const assignedDate = new Date(tx.assigned_date);
-      const diffMs = assignedDate - requestDate;
-      return Math.round(diffMs / 60000); // Convert to minutes
+  // Filter transactions client-side (no separate API call!)
+  const filteredTransactions = useMemo(() => {
+    if (!startDate && !endDate) return transactions;
+    return transactions.filter(tx => {
+      const txDate = new Date(tx.request_date);
+      if (startDate && txDate < new Date(startDate)) return false;
+      if (endDate && txDate > new Date(endDate + 'T23:59:59')) return false;
+      return true;
     });
-    setWaitingTimes(times);
+  }, [transactions, startDate, endDate]);
 
-    // Calculate busiest hours based on request_date
-    const timeSlots = generateTimeSlots(data.transactions);
-    setBusyHours(timeSlots);
-
-    // Calculate busiest days based on request_date
-    const dayCounts = calculateBusyDays(data.transactions);
-    setBusyDays(dayCounts);
-
-    // Transaction types count
-    setTransactionTypeCounts(data.summary.byType);
-
-    // Transaction status count
-    setTransactionStatusCounts(data.summary.byStatus);
-
-    // Additional Statistics
-    setAdditionalStats(calculateAdditionalStats(data.transactions));
-  };
-
-  // Function to generate descriptive time slots (e.g., 8:00 AM - 10:35 AM)
-  const generateTimeSlots = (transactions) => {
-    if (transactions.length === 0) return {};
-
-    // Sort transactions by request_date
-    const sortedTx = transactions.sort((a, b) => new Date(a.request_date) - new Date(b.request_date));
-
-    const firstTime = new Date(sortedTx[0].request_date);
-    const lastTime = new Date(sortedTx[sortedTx.length - 1].request_date);
-
-    // Define the slot duration (e.g., 2 hours)
-    const slotDuration = 2 * 60 * 60 * 1000; // 2 hours in milliseconds
-
-    const slots = {};
-    let slotStart = new Date(firstTime);
-    let slotEnd = new Date(slotStart.getTime() + slotDuration);
-
-    while (slotStart <= lastTime) {
-      const label = `${format(slotStart, 'h:mm a')} - ${format(slotEnd, 'h:mm a')}`;
-      slots[label] = 0;
-
-      // Increment slot
-      slotStart = slotEnd;
-      slotEnd = new Date(slotStart.getTime() + slotDuration);
-    }
-
-    // Assign transactions to slots
-    transactions.forEach(tx => {
-      const requestDate = new Date(tx.request_date);
-      const txTime = requestDate;
-
-      for (let slot in slots) {
-        const [start, end] = slot.split(' - ').map(time => {
-          const date = new Date(requestDate);
-          const [hours, minutes] = convertTo24Hour(time).split(':').map(Number);
-          date.setHours(hours, minutes, 0, 0);
-          return date;
-        });
-
-        if (txTime >= start && txTime < end) {
-          slots[slot] += 1;
-          break;
-        }
-      }
-    });
-
-    return slots;
-  };
-
-  // Helper function to convert 12-hour format to 24-hour for comparison
-  const convertTo24Hour = (timeStr) => {
-    const [time, modifier] = timeStr.split(' ');
-    let [hours, minutes] = time.split(':');
-
-    if (modifier === 'PM' && hours !== '12') {
-      hours = parseInt(hours, 10) + 12;
-    }
-    if (modifier === 'AM' && hours === '12') {
-      hours = '00';
-    }
-
-    return `${hours}:${minutes}`;
-  };
-
-  // Utility function to calculate busy days
-  const calculateBusyDays = (transactions) => {
-    const dayCount = {};
-    transactions.forEach((tx) => {
-      const date = new Date(tx.request_date);
-      const day = format(date, 'EEEE'); // Full day name
-      dayCount[day] = (dayCount[day] || 0) + 1;
-    });
-    return dayCount;
-  };
-
-  // Utility function to calculate additional statistics
-  const calculateAdditionalStats = (transactions) => {
-    const stats = {
+  // Compute all statistics in one pass
+  const stats = useMemo(() => {
+    const result = {
+      waitingTimes: [],
       totalAmount: 0,
-      averageAmount: 0,
       maxAmount: 0,
-      minAmount: Number.MAX_VALUE,
-      totalTransactions: transactions.length,
+      minAmount: Infinity,
       incomingAmount: 0,
-      outgoingAmount: 0
+      outgoingAmount: 0,
+      typeCounts: {},
+      statusCounts: {},
+      hourSlots: {},
+      dayCounts: {},
     };
 
-    transactions.forEach((tx) => {
+    if (filteredTransactions.length === 0) return result;
+
+    filteredTransactions.forEach(tx => {
       const amount = parseFloat(tx.amount_in_figures) || 0;
-      
-      // Track total amount
-      stats.totalAmount += amount;
-      
-      // Track max and min amounts
-      if (amount > stats.maxAmount) stats.maxAmount = amount;
-      if (amount < stats.minAmount) stats.minAmount = amount;
-      
-      // Track incoming and outgoing amounts based on transaction type
-      if (tx.transaction_type?.toLowerCase().includes('deposit') || 
-          tx.transaction_type?.toLowerCase().includes('incoming')) {
-        stats.incomingAmount += amount;
-      } else if (tx.transaction_type?.toLowerCase().includes('withdrawal') || 
-                 tx.transaction_type?.toLowerCase().includes('outgoing')) {
-        stats.outgoingAmount += amount;
+      // FIX: Use transactionType (not transaction_type)
+      const type = tx.transactionType?.toLowerCase() || 'unknown';
+      const status = tx.status || 'unknown';
+      const beneficiaryBranch = tx.beneficiary_branch || '';
+
+      // Waiting time (request_date → assigned_date)
+      if (tx.request_date && tx.assigned_date) {
+        const diffMs = new Date(tx.assigned_date) - new Date(tx.request_date);
+        const diffMin = Math.round(diffMs / 60000);
+        if (!isNaN(diffMin) && diffMin >= 0) {
+          result.waitingTimes.push(diffMin);
+        }
+      }
+
+      // Amount stats
+      result.totalAmount += amount;
+      if (amount > result.maxAmount) result.maxAmount = amount;
+      if (amount < result.minAmount) result.minAmount = amount;
+
+      // Incoming/Outgoing (FIX: use transactionType not transaction_type)
+      if (type === 'deposit') {
+        result.incomingAmount += amount;
+      } else if (type === 'withdraw' || type === 'other-bank-transfer') {
+        result.outgoingAmount += amount;
+      } else if (type === 'transfer') {
+        if (beneficiaryBranch === branchCode) {
+          result.incomingAmount += amount;
+        } else {
+          result.outgoingAmount += amount;
+        }
+      }
+
+      // Type counts
+      result.typeCounts[type] = (result.typeCounts[type] || 0) + 1;
+
+      // Status counts
+      result.statusCounts[status] = (result.statusCounts[status] || 0) + 1;
+
+      // Hour slots (2-hour windows)
+      if (tx.request_date) {
+        const hour = new Date(tx.request_date).getHours();
+        const slotStart = Math.floor(hour / 2) * 2;
+        const slotEnd = slotStart + 2;
+        const label = `${slotStart.toString().padStart(2, '0')}:00 - ${slotEnd.toString().padStart(2, '0')}:00`;
+        result.hourSlots[label] = (result.hourSlots[label] || 0) + 1;
+      }
+
+      // Day counts
+      if (tx.request_date) {
+        try {
+          const day = format(new Date(tx.request_date), 'EEEE');
+          result.dayCounts[day] = (result.dayCounts[day] || 0) + 1;
+        } catch { /* skip invalid dates */ }
       }
     });
 
-    // Calculate average amount
-    stats.averageAmount = transactions.length > 0 ? stats.totalAmount / transactions.length : 0;
+    // Handle edge cases
+    if (result.minAmount === Infinity) result.minAmount = 0;
 
-    return stats;
+    return result;
+  }, [filteredTransactions, branchCode]);
+
+  // Derived waiting time stats (safe against empty arrays)
+  const waitStats = useMemo(() => {
+    const times = stats.waitingTimes;
+    if (times.length === 0) return { min: 0, max: 0, avg: 0 };
+    return {
+      min: Math.min(...times),
+      max: Math.max(...times),
+      avg: (times.reduce((a, b) => a + b, 0) / times.length).toFixed(1),
+    };
+  }, [stats.waitingTimes]);
+
+  const avgAmount = filteredTransactions.length > 0 ? stats.totalAmount / filteredTransactions.length : 0;
+
+  // Sort hour slots for proper chart display
+  const sortedHourSlots = useMemo(() => {
+    const entries = Object.entries(stats.hourSlots);
+    entries.sort((a, b) => a[0].localeCompare(b[0]));
+    return entries;
+  }, [stats.hourSlots]);
+
+  // Sort days in correct weekday order
+  const orderedDays = useMemo(() => {
+    const dayOrder = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    return dayOrder
+      .filter(d => stats.dayCounts[d])
+      .map(d => [d, stats.dayCounts[d]]);
+  }, [stats.dayCounts]);
+
+  // Chart data
+  const busyHoursData = {
+    labels: sortedHourSlots.map(([l]) => l),
+    datasets: [{
+      label: 'Requests',
+      data: sortedHourSlots.map(([, v]) => v),
+      backgroundColor: 'rgba(52, 152, 219, 0.7)',
+      borderColor: '#3498db',
+      borderWidth: 1,
+      borderRadius: 4,
+    }],
   };
 
-  if (!data) {
-    return <div>Loading...</div>;
+  const busyDaysData = {
+    labels: orderedDays.map(([d]) => d),
+    datasets: [{
+      label: 'Requests',
+      data: orderedDays.map(([, c]) => c),
+      backgroundColor: 'rgba(155, 89, 182, 0.7)',
+      borderColor: '#9b59b6',
+      borderWidth: 1,
+      borderRadius: 4,
+    }],
+  };
+
+  const typeLabels = Object.keys(stats.typeCounts).map(k => k.charAt(0).toUpperCase() + k.slice(1).replace(/-/g, ' '));
+  const typeData = {
+    labels: typeLabels,
+    datasets: [{
+      data: Object.values(stats.typeCounts),
+      backgroundColor: CHART_COLORS.slice(0, typeLabels.length),
+      borderWidth: 2,
+      borderColor: '#fff',
+    }],
+  };
+
+  const statusLabels = Object.keys(stats.statusCounts).map(k => k.charAt(0).toUpperCase() + k.slice(1).replace(/_/g, ' '));
+  const statusData = {
+    labels: statusLabels,
+    datasets: [{
+      data: Object.values(stats.statusCounts),
+      backgroundColor: CHART_COLORS.slice(0, statusLabels.length),
+      borderWidth: 2,
+      borderColor: '#fff',
+    }],
+  };
+
+  const chartOptions = (xLabel, yLabel) => ({
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { title: { display: true, text: xLabel }, grid: { display: false } },
+      y: { title: { display: true, text: yLabel }, ticks: { precision: 0 }, beginAtZero: true },
+    },
+  });
+
+  const pieOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { position: 'bottom', labels: { padding: 15, usePointStyle: true } } },
+  };
+
+  if (isLoading) {
+    return (
+      <Box sx={{ p: 2 }}>
+        <Grid container spacing={2}>
+          {[1,2,3,4,5].map(i => (
+            <Grid item xs={6} sm={4} md={2.4} key={i}>
+              <Skeleton variant="rounded" height={120} sx={{ borderRadius: 2 }} />
+            </Grid>
+          ))}
+        </Grid>
+      </Box>
+    );
   }
 
-  // Calculate min, max, avg waiting times
-  const minWaiting = Math.min(...waitingTimes);
-  const maxWaiting = Math.max(...waitingTimes);
-  const avgWaiting = (waitingTimes.reduce((a, b) => a + b, 0) / waitingTimes.length).toFixed(2);
-
-  // Prepare data for busy hours chart
-  const busyHoursData = {
-    labels: Object.keys(busyHours),
-    datasets: [
-      {
-        label: 'Number of Requests',
-        data: Object.values(busyHours),
-        backgroundColor: 'rgba(75, 192, 192, 0.6)',
-      },
-    ],
-  };
-
-  // Prepare data for transaction types pie chart
-  const transactionTypeData = {
-    labels: Object.keys(transactionTypeCounts),
-    datasets: [
-      {
-        label: 'Transaction Types',
-        data: Object.values(transactionTypeCounts),
-        backgroundColor: [
-          '#FF6384',
-          '#36A2EB',
-          '#FFCE56',
-          '#8A2BE2',
-          '#00FA9A',
-        ],
-      },
-    ],
-  };
-
-  // Prepare data for busy days chart
-  const busyDaysData = {
-    labels: Object.keys(busyDays),
-    datasets: [
-      {
-        label: 'Number of Requests',
-        data: Object.values(busyDays),
-        backgroundColor: 'rgba(153, 102, 255, 0.6)',
-      },
-    ],
-  };
-
-  // Prepare data for transactions by status doughnut chart
-  const transactionStatusData = {
-    labels: Object.keys(transactionStatusCounts),
-    datasets: [
-      {
-        label: 'Transaction Status',
-        data: Object.values(transactionStatusCounts),
-        backgroundColor: [
-          '#FF6384',
-          '#36A2EB',
-          '#FFCE56',
-        ],
-      },
-    ],
-  };
-
-  // Handler for resetting date filters
-  const resetFilters = () => {
-    setStartDate('');
-    setEndDate('');
-  };
-
   return (
-    <div className="branch-stat-container">
-      <h2>Branch Statistics</h2>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }}>
+      {/* Date Filter */}
+      <Paper sx={{ p: 2, mb: 3, borderRadius: 3, display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+        <Typography variant="subtitle1" sx={{ fontWeight: 600, mr: 1 }}>Date Range:</Typography>
+        <TextField label="From" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} size="small" InputLabelProps={{ shrink: true }} />
+        <TextField label="To" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} size="small" InputLabelProps={{ shrink: true }} />
+        {(startDate || endDate) && (
+          <Button variant="outlined" size="small" onClick={() => { setStartDate(''); setEndDate(''); }}>Clear</Button>
+        )}
+        <Typography variant="body2" sx={{ ml: 'auto', color: 'text.secondary' }}>
+          {filteredTransactions.length} transactions
+        </Typography>
+      </Paper>
 
-      {/* Date Range Filter */}
-      <Box className="date-filter" sx={{ display: 'flex', gap: '1rem', alignItems: 'center', marginBottom: '2rem' }}>
-        <TextField
-          label="Start Date"
-          type="date"
-          value={startDate}
-          onChange={(e) => setStartDate(e.target.value)}
-          InputLabelProps={{ shrink: true }}
-          size="small"
-        />
-        <TextField
-          label="End Date"
-          type="date"
-          value={endDate}
-          onChange={(e) => setEndDate(e.target.value)}
-          InputLabelProps={{ shrink: true }}
-          size="small"
-        />
-        <Button variant="outlined" color="primary" onClick={resetFilters}>
-          Reset
-        </Button>
-      </Box>
+      {/* Stats Cards */}
+      <Grid container spacing={2} sx={{ mb: 3 }}>
+        <MiniCard title="Min Wait" value={`${waitStats.min} min`} icon={<ScheduleIcon />} color="#2ecc71" delay={0} />
+        <MiniCard title="Avg Wait" value={`${waitStats.avg} min`} icon={<AccessTimeIcon />} color="#3498db" delay={0.05} />
+        <MiniCard title="Max Wait" value={`${waitStats.max} min`} icon={<ScheduleIcon />} color="#e74c3c" delay={0.1} />
+        <MiniCard title="Transactions" value={filteredTransactions.length} icon={<ReceiptIcon />} color="#9b59b6" delay={0.15} />
+        <MiniCard title="Total Amount" value={formatCurrency(stats.totalAmount)} icon={<AttachMoneyIcon />} color="#f39c12" delay={0.2} />
+        <MiniCard title="Avg Amount" value={formatCurrency(avgAmount)} icon={<AttachMoneyIcon />} color="#1abc9c" delay={0.25} />
+        <MiniCard title="Max Amount" value={formatCurrency(stats.maxAmount)} icon={<TrendingUpIcon />} color="#e67e22" delay={0.3} />
+        <MiniCard title="Min Amount" value={formatCurrency(stats.minAmount)} icon={<TrendingDownIcon />} color="#34495e" delay={0.35} />
+        <MiniCard title="Incoming" value={formatCurrency(stats.incomingAmount)} icon={<TrendingUpIcon />} color="#27ae60" delay={0.4} />
+        <MiniCard title="Outgoing" value={formatCurrency(stats.outgoingAmount)} icon={<TrendingDownIcon />} color="#c0392b" delay={0.45} />
+      </Grid>
 
-      {/* Statistics Cards */}
-      <div className="stats-cards">
-        <div className="card">
-          <h3>Minimum Waiting Time</h3>
-          <p>{minWaiting} minutes</p>
-        </div>
-        <div className="card">
-          <h3>Maximum Waiting Time</h3>
-          <p>{maxWaiting} minutes</p>
-        </div>
-        <div className="card">
-          <h3>Average Waiting Time</h3>
-          <p>{avgWaiting} minutes</p>
-        </div>
-        <div className="card">
-          <h3>Total Transactions</h3>
-          <p>{additionalStats.totalTransactions}</p>
-        </div>
-        <div className="card">
-          <h3>Total Amount</h3>
-          <p>ETB {additionalStats.totalAmount.toLocaleString()}</p>
-        </div>
-        <div className="card">
-          <h3>Average Amount</h3>
-          <p>ETB {additionalStats.averageAmount.toLocaleString()}</p>
-        </div>
-        <div className="card">
-          <h3>Maximum Transaction Amount</h3>
-          <p>ETB {additionalStats.maxAmount.toLocaleString()}</p>
-        </div>
-        <div className="card">
-          <h3>Minimum Transaction Amount</h3>
-          <p>ETB {additionalStats.minAmount.toLocaleString()}</p>
-        </div>
-        <div className="card">
-          <h3>Incoming Amount</h3>
-          <p>ETB {additionalStats.incomingAmount.toLocaleString()}</p>
-        </div>
-        <div className="card">
-          <h3>Outgoing Amount</h3>
-          <p>ETB {additionalStats.outgoingAmount.toLocaleString()}</p>
-        </div>
-      </div>
+      {/* Charts */}
+      <Grid container spacing={3} sx={{ mb: 3 }}>
+        <Grid item xs={12} md={6}>
+          <Paper sx={{ p: 3, borderRadius: 3, boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+            <Typography variant="h6" sx={{ fontWeight: 600, color: '#2c3e50', mb: 2 }}>Busy Hours</Typography>
+            <Box sx={{ height: 280 }}>
+              {sortedHourSlots.length > 0 ? (
+                <Bar data={busyHoursData} options={chartOptions('Time Range', 'Requests')} />
+              ) : <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: 'text.secondary' }}>No data</Box>}
+            </Box>
+          </Paper>
+        </Grid>
+        <Grid item xs={12} md={6}>
+          <Paper sx={{ p: 3, borderRadius: 3, boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+            <Typography variant="h6" sx={{ fontWeight: 600, color: '#2c3e50', mb: 2 }}>Busy Days</Typography>
+            <Box sx={{ height: 280 }}>
+              {orderedDays.length > 0 ? (
+                <Bar data={busyDaysData} options={chartOptions('Day of Week', 'Requests')} />
+              ) : <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: 'text.secondary' }}>No data</Box>}
+            </Box>
+          </Paper>
+        </Grid>
+        <Grid item xs={12} md={6}>
+          <Paper sx={{ p: 3, borderRadius: 3, boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+            <Typography variant="h6" sx={{ fontWeight: 600, color: '#2c3e50', mb: 2 }}>Transaction Types</Typography>
+            <Box sx={{ height: 280 }}>
+              {typeLabels.length > 0 ? (
+                <Pie data={typeData} options={pieOptions} />
+              ) : <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: 'text.secondary' }}>No data</Box>}
+            </Box>
+          </Paper>
+        </Grid>
+        <Grid item xs={12} md={6}>
+          <Paper sx={{ p: 3, borderRadius: 3, boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+            <Typography variant="h6" sx={{ fontWeight: 600, color: '#2c3e50', mb: 2 }}>By Status</Typography>
+            <Box sx={{ height: 280 }}>
+              {statusLabels.length > 0 ? (
+                <Doughnut data={statusData} options={pieOptions} />
+              ) : <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: 'text.secondary' }}>No data</Box>}
+            </Box>
+          </Paper>
+        </Grid>
+      </Grid>
 
-      {/* Charts Section */}
-      <div className="charts-section">
-        <div className="chart-card">
-          <h3>Busy Hours</h3>
-          <Bar 
-            data={busyHoursData} 
-            options={{
-              responsive: true,
-              plugins: {
-                tooltip: {
-                  callbacks: {
-                    label: function(context) {
-                      return `Requests: ${context.parsed.y}`;
-                    }
-                  }
-                },
-                legend: {
-                  display: false,
-                }
-              },
-              scales: {
-                x: {
-                  title: {
-                    display: true,
-                    text: 'Time Range',
-                  },
-                },
-                y: {
-                  title: {
-                    display: true,
-                    text: 'Number of Requests',
-                  },
-                  ticks: {
-                    precision:0
-                  }
-                },
-              },
-            }} 
-          />
-        </div>
-        <div className="chart-card">
-          <h3>Busy Days</h3>
-          <Bar 
-            data={busyDaysData} 
-            options={{
-              responsive: true,
-              plugins: {
-                tooltip: {
-                  callbacks: {
-                    label: function(context) {
-                      return `Requests: ${context.parsed.y}`;
-                    }
-                  }
-                },
-                legend: {
-                  display: false,
-                }
-              },
-              scales: {
-                x: {
-                  title: {
-                    display: true,
-                    text: 'Day of the Week',
-                  },
-                },
-                y: {
-                  title: {
-                    display: true,
-                    text: 'Number of Requests',
-                  },
-                  ticks: {
-                    precision:0
-                  }
-                },
-              },
-            }} 
-          />
-        </div>
-        <div className="chart-card">
-          <h3>Transaction Types</h3>
-          <Pie 
-            data={transactionTypeData} 
-            options={{
-              responsive: true,
-              plugins: {
-                legend: {
-                  position: 'bottom',
-                },
-              },
-            }} 
-          />
-        </div>
-        <div className="chart-card">
-          <h3>Transactions by Status</h3>
-          <Doughnut 
-            data={transactionStatusData} 
-            options={{
-              responsive: true,
-              plugins: {
-                legend: {
-                  position: 'bottom',
-                },
-              },
-            }} 
-          />
-        </div>
-      </div>
-
-      {/* Additional Statistics */}
-      <div className="additional-stats">
-        <h3>Additional Statistics</h3>
-        <table>
-          <thead>
-            <tr>
-              <th>Status</th>
-              <th>Count</th>
-            </tr>
-          </thead>
-          <tbody>
-            {Object.entries(transactionStatusCounts).map(([status, count]) => (
-              <tr key={status}>
-                <td>{status.charAt(0).toUpperCase() + status.slice(1)}</td>
-                <td>{count}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
+      {/* Status Summary Table */}
+      {Object.keys(stats.statusCounts).length > 0 && (
+        <Paper sx={{ p: 3, borderRadius: 3, boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+          <Typography variant="h6" sx={{ fontWeight: 600, color: '#2c3e50', mb: 2 }}>Status Summary</Typography>
+          <Box sx={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  <th style={{ padding: '12px 16px', textAlign: 'left', backgroundColor: '#3498db', color: 'white', borderRadius: '8px 0 0 0' }}>Status</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'center', backgroundColor: '#3498db', color: 'white' }}>Count</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'right', backgroundColor: '#3498db', color: 'white', borderRadius: '0 8px 0 0' }}>Percentage</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(stats.statusCounts).map(([status, count], i) => (
+                  <tr key={status} style={{ backgroundColor: i % 2 === 0 ? '#f8f9fa' : 'white' }}>
+                    <td style={{ padding: '10px 16px', borderBottom: '1px solid #eee' }}>
+                      {status.charAt(0).toUpperCase() + status.slice(1).replace(/_/g, ' ')}
+                    </td>
+                    <td style={{ padding: '10px 16px', textAlign: 'center', borderBottom: '1px solid #eee', fontWeight: 600 }}>
+                      {count}
+                    </td>
+                    <td style={{ padding: '10px 16px', textAlign: 'right', borderBottom: '1px solid #eee', color: '#7f8c8d' }}>
+                      {filteredTransactions.length > 0 ? ((count / filteredTransactions.length) * 100).toFixed(1) : 0}%
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Box>
+        </Paper>
+      )}
+    </motion.div>
   );
 };
 
