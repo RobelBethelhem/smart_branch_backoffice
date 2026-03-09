@@ -205,7 +205,7 @@ const Example = () => {
   } = useQuery({
     queryKey: ['table-data', columnFilters, globalFilter, sorting],
     queryFn: async () => {
-      const fetchURL = new URL(`${API_BASE_URL}/api/getUsers`);
+      const fetchURL = new URL(`${API_BASE_URL}/api/getUsers`, window.location.origin);
 
       fetchURL.searchParams.set('filters', JSON.stringify(columnFilters ?? []));
       fetchURL.searchParams.set('globalFilter', globalFilter ?? '');

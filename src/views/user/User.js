@@ -348,7 +348,7 @@ const Example = () => {
   } = useQuery({
     queryKey: ['table-data', columnFilters, globalFilter, sorting],
     queryFn: async () => {
-      const fetchURL = new URL(`${API_BASE_URL}/api/zsmart_branch_requests/get_users_per_branch`);
+      const fetchURL = new URL(`${API_BASE_URL}/api/zsmart_branch_requests/get_users_per_branch`, window.location.origin);
       
       // Set search params before making the request
       fetchURL.searchParams.set('filters', JSON.stringify(columnFilters ?? []));
