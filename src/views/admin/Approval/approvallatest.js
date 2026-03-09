@@ -8,6 +8,7 @@ import { useSelector } from 'react-redux';
 import SendIcon from '@mui/icons-material/Send'; 
 import { motion } from 'framer-motion';
 import DetailPanel from './DetailPanel'; // Adjust the path if necessary
+import { API_BASE_URL } from 'src/config/api';
 
 const getRequestTypeColor = (type) => {
   switch (type?.toLowerCase()) {
@@ -28,7 +29,7 @@ const Example = () => {
   const { data: fetchData = [], isError, isLoading } = useQuery({
     queryKey: ['transactions'],
     queryFn: async () => {
-      const response = await fetch('http://localhost:5000/api/zsmart_branch_requests/get_assigned_to_me', {
+      const response = await fetch(`${API_BASE_URL}/api/zsmart_branch_requests/get_assigned_to_me`, {
         headers: { 'Content-Type': 'application/json', 'x-access-token': accessToken },
       });
       const json = await response.json();
@@ -52,7 +53,7 @@ const Example = () => {
     });
 
     try {
-      const response = await fetch('http://localhost:5000/api/zsmart_branch_requests/transaction_posted', {
+      const response = await fetch(`${API_BASE_URL}/api/zsmart_branch_requests/transaction_posted`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -35,6 +35,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle, XCircle, X as CloseIcon } from 'lucide-react';
 import ExperienceLetterPreview from './ExperienceLetterPreview ';
 import { useNavigate } from 'react-router-dom';
+import { API_BASE_URL } from 'src/config/api';
 
 const formatDate = (dateString) => {
   try {
@@ -193,7 +194,7 @@ const Example = () => {
   } = useQuery({
     queryKey: ['table-data', columnFilters, globalFilter, sorting],
     queryFn: async () => {
-      const fetchURL = new URL('http://localhost:5000/api/rms/admin/landing/get_candidate');
+      const fetchURL = new URL(`${API_BASE_URL}/api/rms/admin/landing/get_candidate`);
 
       fetchURL.searchParams.set('filters', JSON.stringify(columnFilters ?? []));
       fetchURL.searchParams.set('globalFilter', globalFilter ?? '');

@@ -21,6 +21,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import CancelIcon from '@mui/icons-material/Cancel'
 import FingerprintIcon from '@mui/icons-material/Fingerprint'
 import { motion } from 'framer-motion'
+import { API_BASE_URL } from 'src/config/api'
 
 const getStatusColor = (status) => {
   switch (status?.toLowerCase()) {
@@ -65,7 +66,7 @@ const BiometricApproval = () => {
     queryKey: ['branchBiometrics'],
     queryFn: async () => {
       const response = await fetch(
-        'http://localhost:5000/api/zsmart_branch_requests/biometric/branch_registrations',
+        `${API_BASE_URL}/api/zsmart_branch_requests/biometric/branch_registrations`,
         {
           headers: { 'Content-Type': 'application/json', 'x-access-token': accessToken },
         }
@@ -82,7 +83,7 @@ const BiometricApproval = () => {
     setIsProcessing(true)
     try {
       const response = await fetch(
-        'http://localhost:5000/api/zsmart_branch_requests/biometric/approve',
+        `${API_BASE_URL}/api/zsmart_branch_requests/biometric/approve`,
         {
           method: 'POST',
           headers: {
@@ -134,7 +135,7 @@ const BiometricApproval = () => {
     setIsProcessing(true)
     try {
       const response = await fetch(
-        'http://localhost:5000/api/zsmart_branch_requests/biometric/reject',
+        `${API_BASE_URL}/api/zsmart_branch_requests/biometric/reject`,
         {
           method: 'POST',
           headers: {

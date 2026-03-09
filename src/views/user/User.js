@@ -36,6 +36,7 @@ import SearchIcon from '@mui/icons-material/Search';
 
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import { API_BASE_URL } from 'src/config/api';
 
 // Add this component at the top of your file, after the imports
 const CreateUserModal = ({ open, onClose, onSave, tillIdOptions }) => {
@@ -347,7 +348,7 @@ const Example = () => {
   } = useQuery({
     queryKey: ['table-data', columnFilters, globalFilter, sorting],
     queryFn: async () => {
-      const fetchURL = new URL('http://127.0.0.1:5000/api/zsmart_branch_requests/get_users_per_branch');
+      const fetchURL = new URL(`${API_BASE_URL}/api/zsmart_branch_requests/get_users_per_branch`);
       
       // Set search params before making the request
       fetchURL.searchParams.set('filters', JSON.stringify(columnFilters ?? []));
@@ -390,7 +391,7 @@ const Example = () => {
     queryKey: ['till-ids'],
     queryFn: async () => {
       const response = await fetch(
-        'http://127.0.0.1:5000/api/zsmart_branch_requests/till_id',
+        `${API_BASE_URL}/api/zsmart_branch_requests/till_id`,
         {
           headers: {
             'x-access-token': accessToken,
@@ -762,7 +763,7 @@ function useCreateUser(refetch) {
 
   return useMutation({
     mutationFn: async (user) => {
-      const response = await fetch('http://127.0.0.1:5000/api/zsmart_branch_requests/add_teller', {
+      const response = await fetch(`${API_BASE_URL}/api/zsmart_branch_requests/add_teller`, {
         method: 'POST',
         headers: {
             'x-access-token': accessToken,

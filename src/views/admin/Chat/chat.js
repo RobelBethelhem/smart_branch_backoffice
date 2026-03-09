@@ -18,6 +18,7 @@ import AssignmentIndIcon from '@mui/icons-material/AssignmentInd';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { useSelector } from 'react-redux';
+import { API_BASE_URL } from 'src/config/api';
 
 const TransactionTypeCell = ({ value }) => {
   const getTypeColor = (type) => {
@@ -696,7 +697,7 @@ const SearchComponent = () => {
 
   // const fetchData = async (query = '') => {
   //   try {
-  //     const response = await fetch(`http://localhost:5000/api/zsmart_branch_requests/transactions${query ? `?query=${query}` : ''}`);
+  //     const response = await fetch(`${API_BASE_URL}/api/zsmart_branch_requests/transactions${query ? `?query=${query}` : ''}`);
   //     const result = await response.json();
   //     setData(result);
   //     setFilteredData(result);
@@ -709,7 +710,7 @@ const SearchComponent = () => {
 
   const fetchData = async (query = '') => {
     try {
-        const response = await fetch(`http://localhost:5000/api/zsmart_branch_requests/transactions${query ? `?query=${query}` : ''}`, {
+        const response = await fetch(`${API_BASE_URL}/api/zsmart_branch_requests/transactions${query ? `?query=${query}` : ''}`, {
             method: 'GET', // Specify the method if needed
             headers: {
                 'Content-Type': 'application/json',
@@ -758,7 +759,7 @@ const SearchComponent = () => {
         transactions: selectedRows
       };
 
-      const response = await fetch('http://localhost:5000/api/zsmart_branch_requests/assigned_to_me', {
+      const response = await fetch(`${API_BASE_URL}/api/zsmart_branch_requests/assigned_to_me`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

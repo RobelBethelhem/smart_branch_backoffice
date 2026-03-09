@@ -57,6 +57,7 @@ import {
   AreaChart, 
   Area
 } from 'recharts';
+import { API_BASE_URL } from 'src/config/api';
 
 // Styled components for the dialog
 const StyledDialog = styled(Dialog)(({ theme }) => ({
@@ -149,7 +150,7 @@ const StatisticsTab = ({ initialStats }) => {
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/zsmart_branch_requests/branch_transactions', {
+        const response = await fetch(`${API_BASE_URL}/api/zsmart_branch_requests/branch_transactions`, {
           headers: {
             'Content-Type': 'application/json',
             'x-access-token': accessToken,
@@ -573,7 +574,7 @@ const Example = () => {
   const { data: fetchData = [], isError, isLoading } = useQuery({
     queryKey: ['transactions'],
     queryFn: async () => {
-      const response = await fetch('http://localhost:5000/api/zsmart_branch_requests/branch_transactions', {
+      const response = await fetch(`${API_BASE_URL}/api/zsmart_branch_requests/branch_transactions`, {
         headers: { 'Content-Type': 'application/json', 'x-access-token': accessToken },
       });
       const json = await response.json();
@@ -602,7 +603,7 @@ const Example = () => {
     });
 
     try {
-      const response = await fetch('http://localhost:5000/api/zsmart_branch_requests/transaction_audited', {
+      const response = await fetch(`${API_BASE_URL}/api/zsmart_branch_requests/transaction_audited`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

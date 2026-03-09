@@ -24,6 +24,7 @@ import 'react-toastify/dist/ReactToastify.css';
 import { useSelector } from 'react-redux';
 import { motion } from 'framer-motion';
 import DetailPanel from './DetailPanel';
+import { API_BASE_URL } from 'src/config/api';
 
 // Styled components for the dialog
 const StyledDialog = styled(Dialog)(({ theme }) => ({
@@ -65,7 +66,7 @@ const Example = () => {
   const { data = { transactions: [], availableUsers: [] }, isError, isLoading } = useQuery({
     queryKey: ['transactions'],
     queryFn: async () => {
-      const response = await fetch('http://localhost:5000/api/zsmart_branch_requests/get_assigned_transaction_per_brnach', {
+      const response = await fetch(`${API_BASE_URL}/api/zsmart_branch_requests/get_assigned_transaction_per_brnach`, {
         headers: { 'Content-Type': 'application/json', 'x-access-token': accessToken },
       });
       const json = await response.json();
@@ -108,7 +109,7 @@ const Example = () => {
     });
 
     try {
-      const response = await fetch('http://localhost:5000/api/zsmart_branch_requests/transaction_reassigned', {
+      const response = await fetch(`${API_BASE_URL}/api/zsmart_branch_requests/transaction_reassigned`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

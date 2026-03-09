@@ -15,6 +15,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import WarningIcon from '@mui/icons-material/Warning';
 import { motion } from 'framer-motion';
 import DetailPanel from './DetailPanel'; // Adjust the path if necessary
+import { API_BASE_URL } from 'src/config/api';
 
 // Ethiopian Birr Denominations
 const DENOMINATIONS = [
@@ -81,7 +82,7 @@ const Example = () => {
   const { data: fetchData = [], isError, isLoading } = useQuery({
     queryKey: ['transactions'],
     queryFn: async () => {
-      const response = await fetch('http://localhost:5000/api/zsmart_branch_requests/get_assigned_to_me', {
+      const response = await fetch(`${API_BASE_URL}/api/zsmart_branch_requests/get_assigned_to_me`, {
         headers: { 'Content-Type': 'application/json', 'x-access-token': accessToken },
       });
       const json = await response.json();
@@ -100,7 +101,7 @@ const Example = () => {
     setIsLoadingTill(true);
     setTillError(null);
     try {
-      const response = await fetch('http://localhost:5000/api/zsmart_branch_requests/get_till_denominations', {
+      const response = await fetch(`${API_BASE_URL}/api/zsmart_branch_requests/get_till_denominations`, {
         headers: {
           'Content-Type': 'application/json',
           'x-access-token': accessToken,
@@ -189,7 +190,7 @@ const Example = () => {
 
     setIsAutoPopulating(true);
     try {
-      const response = await fetch('http://localhost:5000/api/zsmart_branch_requests/autopopulate_denomination', {
+      const response = await fetch(`${API_BASE_URL}/api/zsmart_branch_requests/autopopulate_denomination`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -260,7 +261,7 @@ const Example = () => {
     setIsSubmitting(true);
 
     try {
-      let endpoint = 'http://localhost:5000/api/zsmart_branch_requests/transaction_posted';
+      let endpoint = `${API_BASE_URL}/api/zsmart_branch_requests/transaction_posted`;
       let body = {
         transaction_id: selectedTransaction._id,
       };
@@ -268,7 +269,7 @@ const Example = () => {
       // Use denomination endpoint for Deposit/Withdraw/ECheck
       if (needsDenomination) {
         const transactionType = selectedTransaction.transactionType.toLowerCase();
-        endpoint = `http://localhost:5000/api/zsmart_branch_requests/process-${transactionType}-with-denomination`;
+        endpoint = `${API_BASE_URL}/api/zsmart_branch_requests/process-${transactionType}-with-denomination`;
         body = {
           [`${transactionType}_id`]: selectedTransaction._id,
           denomination: denomination,
@@ -277,7 +278,7 @@ const Example = () => {
       }
       // Transfer: call process-transfer directly (no denomination needed, integrates with Flexcube)
       else if (selectedTransaction?.transactionType?.toLowerCase() === 'transfer') {
-        endpoint = 'http://localhost:5000/api/zsmart_branch_requests/process-transfer';
+        endpoint = `${API_BASE_URL}/api/zsmart_branch_requests/process-transfer`;
         body = {
           transfer_id: selectedTransaction._id,
           posted_by: userName,
@@ -353,7 +354,7 @@ const Example = () => {
     const selectedTransaction = fetchData[parseInt(selectedTransactionIndex)];
 
     try {
-      const response = await fetch('http://localhost:5000/api/zsmart_branch_requests/transaction_posted', {
+      const response = await fetch(`${API_BASE_URL}/api/zsmart_branch_requests/transaction_posted`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

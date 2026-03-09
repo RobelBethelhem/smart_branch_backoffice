@@ -11,7 +11,7 @@
 //       const refreshToken = localStorage.getItem('refreshToken');
 //       if (refreshToken) {
 //         try {
-//           const response = await fetch('http://localhost:5000/api/refreshToken/', {
+//           const response = await fetch(`${API_BASE_URL}/api/refreshToken/`, {
 //             method: 'DELETE',
 //             headers: {
 //               'Content-Type': 'application/json',
@@ -68,6 +68,7 @@ import { Navigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import { API_BASE_URL } from 'src/config/api';
 
 const LogOut = () => {
   const [redirectPath, setRedirectPath] = useState(null);

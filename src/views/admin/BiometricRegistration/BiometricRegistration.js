@@ -28,8 +28,9 @@ import UsbIcon from '@mui/icons-material/Usb'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import ErrorIcon from '@mui/icons-material/Error'
 import { motion } from 'framer-motion'
+import { API_BASE_URL, FINGERPRINT_WS_URL } from 'src/config/api'
 
-const FINGERPRINT_SERVICE_URL = 'ws://localhost:8089'
+const FINGERPRINT_SERVICE_URL = FINGERPRINT_WS_URL
 
 const getStatusColor = (status) => {
   switch (status?.toLowerCase()) {
@@ -84,7 +85,7 @@ const BiometricRegistration = () => {
     queryKey: ['biometricRegistrations'],
     queryFn: async () => {
       const response = await fetch(
-        'http://localhost:5000/api/zsmart_branch_requests/biometric/my_registrations',
+        `${API_BASE_URL}/api/zsmart_branch_requests/biometric/my_registrations`,
         {
           headers: { 'Content-Type': 'application/json', 'x-access-token': accessToken },
         }
@@ -228,7 +229,7 @@ const BiometricRegistration = () => {
         setCustomerName('')
         try {
           const response = await fetch(
-            `http://localhost:5000/api/zsmart_branch_requests/biometric/customer/${cif}`,
+            `${API_BASE_URL}/api/zsmart_branch_requests/biometric/customer/${cif}`,
             {
               headers: { 'Content-Type': 'application/json', 'x-access-token': accessToken },
             }
@@ -320,7 +321,7 @@ const BiometricRegistration = () => {
 
     try {
       const response = await fetch(
-        'http://localhost:5000/api/zsmart_branch_requests/biometric/register',
+        `${API_BASE_URL}/api/zsmart_branch_requests/biometric/register`,
         {
           method: 'POST',
           headers: {

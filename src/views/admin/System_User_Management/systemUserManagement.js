@@ -34,6 +34,7 @@ import { useDropzone } from 'react-dropzone';
 
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import { API_BASE_URL } from 'src/config/api';
 
 
 
@@ -204,7 +205,7 @@ const Example = () => {
   } = useQuery({
     queryKey: ['table-data', columnFilters, globalFilter, sorting],
     queryFn: async () => {
-      const fetchURL = new URL('http://127.0.0.1:5000/api/getUsers');
+      const fetchURL = new URL(`${API_BASE_URL}/api/getUsers`);
 
       fetchURL.searchParams.set('filters', JSON.stringify(columnFilters ?? []));
       fetchURL.searchParams.set('globalFilter', globalFilter ?? '');
@@ -564,7 +565,7 @@ function useCreateUser(refetch) {
       }
 
 
-      // const response = await axios.post(`http://localhost:5000/api/signUp/`, user);
+      // const response = await axios.post(`${API_BASE_URL}/api/signUp/`, user);
       // return response.data;
     },
     onMutate: (newUserInfo) => {
@@ -595,7 +596,7 @@ function useUpdateUser() {
         body: JSON.stringify(user)
       });
 
-      // const response = await axios.patch(`http://localhost:5000/api/editUser/`, user);
+      // const response = await axios.patch(`${API_BASE_URL}/api/editUser/`, user);
      
       const data = await response.json()
       if(response.ok){
@@ -620,7 +621,7 @@ function useDeleteUser(refetch) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (userId) => {
-      // const response = await axios.delete(`http://localhost:5000/api/deleteUser/`, {
+      // const response = await axios.delete(`${API_BASE_URL}/api/deleteUser/`, {
       //   data: { id: userId },
       // });
 

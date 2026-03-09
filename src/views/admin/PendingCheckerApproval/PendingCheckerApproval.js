@@ -12,6 +12,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import { motion } from 'framer-motion';
+import { API_BASE_URL } from 'src/config/api';
 
 // Ethiopian Birr Denominations
 const DENOMINATIONS = [
@@ -54,7 +55,7 @@ const PendingCheckerApproval = () => {
   const { data: fetchData = [], isError, isLoading, refetch } = useQuery({
     queryKey: ['pending-checker-transactions'],
     queryFn: async () => {
-      const response = await fetch('http://localhost:5000/api/zsmart_branch_requests/pending-checker-transactions', {
+      const response = await fetch(`${API_BASE_URL}/api/zsmart_branch_requests/pending-checker-transactions`, {
         headers: { 'Content-Type': 'application/json', 'x-access-token': accessToken },
       });
       const json = await response.json();
@@ -85,7 +86,7 @@ const PendingCheckerApproval = () => {
 
     setIsSubmitting(true);
     try {
-      const response = await fetch('http://localhost:5000/api/zsmart_branch_requests/approve-pending-transaction', {
+      const response = await fetch(`${API_BASE_URL}/api/zsmart_branch_requests/approve-pending-transaction`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -138,7 +139,7 @@ const PendingCheckerApproval = () => {
 
     setIsSubmitting(true);
     try {
-      const response = await fetch('http://localhost:5000/api/zsmart_branch_requests/approve-pending-transaction', {
+      const response = await fetch(`${API_BASE_URL}/api/zsmart_branch_requests/approve-pending-transaction`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
