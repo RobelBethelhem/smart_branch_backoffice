@@ -40,6 +40,20 @@ import DeleteIcon from '@mui/icons-material/Delete'
 import SaveIcon from '@mui/icons-material/Save'
 import { ToastContainer, toast } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
+import { API_BASE_URL } from 'src/config/api'
+
+// Helper: parse JSON response safely, throw meaningful error if not JSON
+async function parseJsonResponse(response) {
+  const contentType = response.headers.get('content-type')
+  if (!response.ok) {
+    if (contentType && contentType.includes('application/json')) {
+      const result = await response.json()
+      throw new Error(result.message || `Request failed with status ${response.status}`)
+    }
+    throw new Error(`Request failed with status ${response.status} (${response.statusText})`)
+  }
+  return response.json()
+}
 
 // Tab Panel Component
 function TabPanel(props) {
@@ -73,13 +87,13 @@ const CustomerCategoryLimitTab = () => {
   } = useQuery({
     queryKey: ['customerCategories'],
     queryFn: async () => {
-      const response = await fetch('/api/api/limit-management/flexcube/customer-categories', {
+      const response = await fetch(`${API_BASE_URL}/api/limit-management/flexcube/customer-categories`, {
         headers: {
           'Content-Type': 'application/json',
           'x-access-token': accessToken,
         },
       })
-      const result = await response.json()
+      const result = await parseJsonResponse(response)
       if (result.error) throw new Error(result.message)
       return result.data.map((item) => item.CUSTOMER_CATEGORY)
     },
@@ -95,13 +109,13 @@ const CustomerCategoryLimitTab = () => {
   } = useQuery({
     queryKey: ['customerCategoryLimits'],
     queryFn: async () => {
-      const response = await fetch('/api/api/limit-management/customer-category-limits', {
+      const response = await fetch(`${API_BASE_URL}/api/limit-management/customer-category-limits`, {
         headers: {
           'Content-Type': 'application/json',
           'x-access-token': accessToken,
         },
       })
-      const result = await response.json()
+      const result = await parseJsonResponse(response)
       if (result.error) throw new Error(result.message)
       return result.data
     },
@@ -110,7 +124,7 @@ const CustomerCategoryLimitTab = () => {
   // Create mutation
   const createMutation = useMutation({
     mutationFn: async (newLimit) => {
-      const response = await fetch('/api/api/limit-management/customer-category-limits', {
+      const response = await fetch(`${API_BASE_URL}/api/limit-management/customer-category-limits`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -122,7 +136,7 @@ const CustomerCategoryLimitTab = () => {
           created_by_id: user.id,
         }),
       })
-      const result = await response.json()
+      const result = await parseJsonResponse(response)
       if (result.error) throw new Error(result.message)
       return result.data
     },
@@ -138,7 +152,7 @@ const CustomerCategoryLimitTab = () => {
   // Update mutation
   const updateMutation = useMutation({
     mutationFn: async ({ id, ...values }) => {
-      const response = await fetch(`/api/api/limit-management/customer-category-limits/${id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/limit-management/customer-category-limits/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -150,7 +164,7 @@ const CustomerCategoryLimitTab = () => {
           updated_by_id: user.id,
         }),
       })
-      const result = await response.json()
+      const result = await parseJsonResponse(response)
       if (result.error) throw new Error(result.message)
       return result.data
     },
@@ -166,14 +180,14 @@ const CustomerCategoryLimitTab = () => {
   // Delete mutation
   const deleteMutation = useMutation({
     mutationFn: async (id) => {
-      const response = await fetch(`/api/api/limit-management/customer-category-limits/${id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/limit-management/customer-category-limits/${id}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
           'x-access-token': accessToken,
         },
       })
-      const result = await response.json()
+      const result = await parseJsonResponse(response)
       if (result.error) throw new Error(result.message)
       return result.data
     },
@@ -444,13 +458,13 @@ const MakerCheckerThresholdTab = () => {
   } = useQuery({
     queryKey: ['makerCheckerThreshold'],
     queryFn: async () => {
-      const response = await fetch('/api/api/limit-management/maker-checker-threshold', {
+      const response = await fetch(`${API_BASE_URL}/api/limit-management/maker-checker-threshold`, {
         headers: {
           'Content-Type': 'application/json',
           'x-access-token': accessToken,
         },
       })
-      const result = await response.json()
+      const result = await parseJsonResponse(response)
       if (result.error) throw new Error(result.message)
       return result.data
     },
@@ -474,7 +488,7 @@ const MakerCheckerThresholdTab = () => {
 
     setIsSaving(true)
     try {
-      const response = await fetch('/api/api/limit-management/maker-checker-threshold', {
+      const response = await fetch(`${API_BASE_URL}/api/limit-management/maker-checker-threshold`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -487,7 +501,7 @@ const MakerCheckerThresholdTab = () => {
           created_by_id: user.id,
         }),
       })
-      const result = await response.json()
+      const result = await parseJsonResponse(response)
       if (result.error) throw new Error(result.message)
       toast.success('Maker-checker threshold saved successfully')
       setIsEditing(false)
