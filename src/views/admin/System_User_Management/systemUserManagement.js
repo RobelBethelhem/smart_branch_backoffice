@@ -138,7 +138,7 @@ const ExcelImportDialog = ({ open, onClose, onImport }) => {
           const formData = new FormData();
           formData.append('file', file);
 
-          const response = await fetch('/api/api/candidates/employee_excel_upload', {
+          const response = await fetch(`${API_BASE_URL}/api/candidates/employee_excel_upload`, {
             method: 'POST',
             headers: {
               'x-access-token': accessToken,
@@ -548,7 +548,7 @@ function useCreateUser(refetch) {
   return useMutation({
     mutationFn: async (user) => {
 
-      const response = await fetch("/api/api/signUp/", {
+      const response = await fetch(`${API_BASE_URL}/api/signUp/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -587,7 +587,7 @@ function useUpdateUser() {
   return useMutation({
     mutationFn: async (user) => {
 
-      const response = await fetch("/api/api/editUser/", {
+      const response = await fetch(`${API_BASE_URL}/api/editUser/`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -625,8 +625,8 @@ function useDeleteUser(refetch) {
       //   data: { id: userId },
       // });
 
-      const response = await fetch("/api/api/deleteUser/", {
-        method: "Delete",
+      const response = await fetch(`${API_BASE_URL}/api/deleteUser/`, {
+        method: "DELETE",
         headers: {
           "Content-Type": "application/json",
           "x-access-token": getAccessToken(),
