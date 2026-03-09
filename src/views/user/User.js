@@ -48,7 +48,7 @@ const CreateUserModal = ({ open, onClose, onSave, tillIdOptions }) => {
   const [errors, setErrors] = useState({});
 
   // Define roles
-  const roleOptions = ['Teller', 'Authorizer', 'Auditor', 'Maker'];
+  const roleOptions = ['Teller', 'Maker', 'Authorizer', 'Auditor', 'Admin'];
 
   const handleChange = (field, value) => {
     setFormData(prev => {
@@ -98,6 +98,7 @@ const CreateUserModal = ({ open, onClose, onSave, tillIdOptions }) => {
       user: formData.user,
       till_id: formData.till_id,
       role: formData.role,
+      roles: [formData.role],
       email: `${formData.user}@zemenbank.com`
     };
 
@@ -416,7 +417,7 @@ const Example = () => {
   });
 
   // Define hardcoded roles as the fetch API for roles is removed
-  const roles = useMemo(() => ['Admin', 'Manager', 'User', 'Guest'], []);
+  const roles = useMemo(() => ['Teller', 'Maker', 'Authorizer', 'Auditor', 'Admin'], []);
 
   const handleExcelImport = () => {
     setIsExcelImportOpen(true);
@@ -449,11 +450,21 @@ const Example = () => {
       {
         accessorKey: 'roles',
         header: 'Role',
+        Cell: ({ cell }) => {
+          const value = cell.getValue();
+          return Array.isArray(value) ? value.join(', ') : (value || '');
+        },
         Edit: ({ row, table }) => {
-          const roleOptions = ['Teller', 'Authorizer', 'Auditor'];
-          
+          const roleOptions = ['Teller', 'Maker', 'Authorizer', 'Auditor', 'Admin'];
+
+          // roles is an array in the DB like ["Teller"], extract first element
+          const currentRole = Array.isArray(row.original.roles)
+            ? row.original.roles[0]
+            : (row.original.roles || null);
+
           const handleChange = (event, newValue) => {
-            table.options.meta.updateData(row.id, 'role', newValue);
+            // Store as array to match backend schema
+            table.options.meta.updateData(row.id, 'roles', newValue ? [newValue] : []);
             // Clear till_id if role is changed from Teller
             if (newValue !== 'Teller') {
               table.options.meta.updateData(row.id, 'till_id', null);
@@ -463,7 +474,7 @@ const Example = () => {
           return (
             <Autocomplete
               disablePortal
-              value={row.original.role || null}
+              value={currentRole}
               onChange={handleChange}
               options={roleOptions}
               renderInput={(params) => (
@@ -500,7 +511,9 @@ const Example = () => {
         header: 'Till ID',
         Edit: ({ row, table }) => {
           const tillIdOptions = Array.isArray(tillIdData) ? tillIdData : [];
-          const isTeller = row.original.role === 'Teller';
+          const isTeller = Array.isArray(row.original.roles)
+            ? row.original.roles.includes('Teller')
+            : row.original.roles === 'Teller';
 
           const handleChange = (event, newValue) => {
             table.options.meta.updateData(row.id, 'till_id', newValue);
@@ -573,11 +586,14 @@ const Example = () => {
 
   const handleSaveUser = async ({ values, table }) => {
     console.log("Saving User with Values:", values);
+    // Ensure roles is always an array for the backend
+    const rolesArray = Array.isArray(values.roles) ? values.roles : (values.roles ? [values.roles] : []);
     const updatedValues = {
       ...values,
       user: values.user,
       email: `${values.user}@zemenbank.com`,
       till_id: values.till_id,
+      roles: rolesArray,
     };
 
     console.log('Updated Values for Saving:', updatedValues);
@@ -881,17 +897,21 @@ const validateEmail = (email) =>
 
 function validateUser(user) {
   console.log("Validating User:", user);
+  // roles is an array like ["Teller"]
+  const hasRole = Array.isArray(user.roles) ? user.roles.length > 0 : !!user.roles;
+  const firstRole = Array.isArray(user.roles) ? user.roles[0] : user.roles;
+
   const errors = {
     user: !validateRequired(user.user)
       ? 'Name is Required'
       : '',
-    role: !validateRequired(user.role)
+    role: !hasRole
       ? 'Role is Required'
       : '',
   };
 
   // Only validate till_id if role is Teller
-  if (user.role === 'Teller') {
+  if (firstRole === 'Teller') {
     errors.till_id = !validateRequired(user.till_id) ? 'Till ID is Required for Teller role' : '';
   }
 
