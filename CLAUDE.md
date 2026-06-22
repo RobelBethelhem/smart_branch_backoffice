@@ -48,7 +48,7 @@ npm run serve
    - Actions: `setUser`, `clearUser`, `loginSuccess`, `logout`
 
 2. **Token Verification**: `PrivateRoute` component verifies tokens on every protected route access
-   - Endpoint: `/api/api/verify-token`
+   - Endpoint: `/api/verify-token`
    - Token sent via `x-access-token` header
    - Uses `jwt-decode` to extract user roles from JWT
 
@@ -59,18 +59,18 @@ npm run serve
 
 ### API Communication & Backend Integration
 
-**Backend Server**: Node.js/Express server running on `http://localhost:5000` (default port 5000, configurable)
+**Backend Server**: Node.js/Express server running on `http://10.1.1.181:5000` (default port 5000, configurable)
 
 **Frontend Proxy Setup**:
-- All `/api` requests are proxied to `http://localhost:5000` (configured in `vite.config.mjs`)
-- Example: Frontend calls `/api/api/login` → proxied to `http://localhost:5000/api/login`
-- The double `/api/api` is intentional: first `/api` triggers proxy, second `/api` is the actual backend route
+- All `/api` requests are proxied to `http://10.1.1.181:5000` (configured in `vite.config.mjs`)
+- Example: Frontend calls `/api/login` → proxied to `http://10.1.1.181:5000/api/login`
+- The double `/api` is intentional: first `/api` triggers proxy, second `/api` is the actual backend route
 
 **API Call Pattern**:
 ```js
 const accessToken = useSelector(state => state.user.accessToken)
 
-const response = await fetch('/api/api/endpoint', {
+const response = await fetch('/api/endpoint', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
@@ -82,7 +82,7 @@ const response = await fetch('/api/api/endpoint', {
 
 **Key Backend Endpoints**:
 
-1. **Authentication** (`/api/api/`):
+1. **Authentication** (`/api/`):
    - `POST /login` - User login, returns accessToken & refreshToken
    - `POST /verify-token` - Verify JWT token validity
    - `POST /signUp` - User registration (default password: `@Test1234`)
@@ -115,7 +115,7 @@ const response = await fetch('/api/api/endpoint', {
    - Site manager KPI tracking
 
 **Authentication Flow**:
-1. User logs in via `POST /api/api/login` with email/password
+1. User logs in via `POST /api/login` with email/password
 2. Backend validates credentials, returns JWT accessToken (15min) and refreshToken (30d)
 3. Frontend stores tokens in Redux state (persisted to sessionStorage)
 4. Every API call includes `x-access-token` header with JWT
@@ -146,7 +146,7 @@ const response = await fetch('/api/api/endpoint', {
 - Oracle Instant Client required for Flexcube banking integration
 - CORS enabled for all origins in backend
 - Token sent as `x-access-token` header (not `Authorization: Bearer`)
-- Some endpoints return direct URLs to backend: use `http://localhost:5000` for development
+- Some endpoints return direct URLs to backend: use `http://10.1.1.181:5000` for development
 
 ### State Management
 
@@ -243,7 +243,7 @@ Pattern: Uses `qrcode.react` for QR codes, `jspdf` for PDF export, `html2canvas`
 ```js
 const accessToken = useSelector(state => state.user.accessToken)
 
-const response = await fetch('/api/api/your-endpoint', {
+const response = await fetch('/api/your-endpoint', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
@@ -264,7 +264,7 @@ if (response.ok) {
 
 **Direct Backend Call Pattern** (some views use this):
 ```js
-const response = await fetch('http://localhost:5000/api/zsmart_branch_requests/endpoint', {
+const response = await fetch('http://10.1.1.181:5000/api/zsmart_branch_requests/endpoint', {
   headers: {
     'Content-Type': 'application/json',
     'x-access-token': accessToken
@@ -343,7 +343,7 @@ dispatch({ type: 'setUser', role: 'Admin', accessToken: token })
 ```bash
 cd D:\smart_branch_backend
 npm install
-npm start  # Runs on http://localhost:5000 with nodemon
+npm start  # Runs on http://10.1.1.181:5000 with nodemon
 ```
 
 ### Starting Frontend
