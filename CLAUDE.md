@@ -54,23 +54,38 @@ npm run serve
 
 3. **Role-Based Access Control (RBAC)**: Multiple user roles with different permissions
    - Roles: `Super_Admin`, `Admin`, `Teller`, `Maker`, `CSR`, `Authorizer`, `Auditor`, `Branch_Management`, `user`
+   - The roles assignable in System User Management are defined in `src/views/admin/System_User_Management/fetchedRole.js` (`Teller`, `Maker`, `Authorizer`, `Auditor`, `Admin`)
    - Routes include `roles` array defining allowed roles (see `src/routes.js`)
-   - Navigation menu dynamically generated based on user role (see `src/_nav.js`)
+   - Navigation menu dynamically generated based on user role (see `src/_nav.js` — `_nav(userRole)` builds menu via spread blocks per role)
+   - **Role check is case-sensitive and uses only `decodedToken.roles[0]`** (first JWT role) in `privateRoute.js`. The real JWT roles are **capitalized** (`Admin`, `Teller`, …).
+   - **Gotcha:** several routes in `routes.js` (and the games/letters/voting nav) use **lowercase** `'admin'`/`'user'` in their `roles` arrays. These do not match capitalized JWT roles, so those routes are effectively legacy/unreachable for current users. Use capitalized role names for any new route to be reachable.
 
 ### API Communication & Backend Integration
 
 **Backend Server**: Node.js/Express server running on `http://localhost:5000` (default port 5000, configurable)
 
 **Frontend Proxy Setup**:
-- All `/api` requests are proxied to `http://localhost:5000` (configured in `vite.config.mjs`)
-- Example: Frontend calls `/api/api/login` → proxied to `http://localhost:5000/api/login`
-- The double `/api/api` is intentional: first `/api` triggers proxy, second `/api` is the actual backend route
+- All `/api` requests are proxied by Vite (configured in `vite.config.mjs`)
+- The proxy target is **`VITE_API_BASE_URL`** from the frontend `.env` (defaults to `http://localhost:5000`)
+- Vite strips the leading `/api` and forwards the rest: Frontend calls `/api/api/login` → proxy rewrites to `/api/login` → backend
+- The double `/api/api` is intentional: first `/api` triggers the proxy + rewrite, second `/api` is the actual backend route
+
+**Centralized API Config (`src/config/api.js`)** — USE THIS, do not hardcode URLs:
+```js
+export const API_BASE_URL = '/api'                          // prefix for all API calls (goes through proxy)
+export const FINGERPRINT_WS_URL = import.meta.env.VITE_FINGERPRINT_WS_URL || 'ws://localhost:8089'
+```
+- New code should `import { API_BASE_URL } from 'src/config/api'` and build URLs as `` `${API_BASE_URL}/api/endpoint` ``
+- Recent commits migrated views away from hardcoded `http://localhost:5000` to this pattern — follow it for any new/edited fetch calls
+- Note: a few legacy call sites (e.g. `privateRoute.js` `verify-token`) still use the literal `'/api/api/...'` string; both resolve identically through the proxy
 
 **API Call Pattern**:
 ```js
+import { API_BASE_URL } from 'src/config/api'
+
 const accessToken = useSelector(state => state.user.accessToken)
 
-const response = await fetch('/api/api/endpoint', {
+const response = await fetch(`${API_BASE_URL}/api/endpoint`, {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
@@ -146,7 +161,7 @@ const response = await fetch('/api/api/endpoint', {
 - Oracle Instant Client required for Flexcube banking integration
 - CORS enabled for all origins in backend
 - Token sent as `x-access-token` header (not `Authorization: Bearer`)
-- Some endpoints return direct URLs to backend: use `http://localhost:5000` for development
+- Backend target is configurable via `VITE_API_BASE_URL` in the frontend `.env` — do not assume `http://localhost:5000` in code
 
 ### State Management
 
@@ -215,6 +230,9 @@ Pattern: Uses `qrcode.react` for QR codes, `jspdf` for PDF export, `html2canvas`
 2. **Prettier**: No semicolons, single quotes, 100 char width (see `.prettierrc.js`)
 3. **Port**: Dev server runs on port 4000, not default 3000
 4. **Build Output**: `build/` directory, not `dist/`
+5. **Frontend `.env`** (committed at repo root, Vite reads at startup — restart after changes):
+   - `VITE_API_BASE_URL` — backend Express target for the proxy (default `http://localhost:5000`). Switch this between localhost and production.
+   - `VITE_FINGERPRINT_WS_URL` — local fingerprint scanner WebSocket service (default `ws://localhost:8089`)
 
 ## Common Workflows
 
@@ -239,11 +257,13 @@ Pattern: Uses `qrcode.react` for QR codes, `jspdf` for PDF export, `html2canvas`
 
 ### Making API Calls
 
-**Standard Pattern** (with proxy):
+**Standard Pattern** (with proxy — preferred):
 ```js
+import { API_BASE_URL } from 'src/config/api'
+
 const accessToken = useSelector(state => state.user.accessToken)
 
-const response = await fetch('/api/api/your-endpoint', {
+const response = await fetch(`${API_BASE_URL}/api/your-endpoint`, {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
@@ -262,15 +282,13 @@ if (response.ok) {
 }
 ```
 
-**Direct Backend Call Pattern** (some views use this):
+**`new URL()` Pattern** (used when building query params — pass `window.location.origin` as base since `API_BASE_URL` is relative):
 ```js
-const response = await fetch('http://localhost:5000/api/zsmart_branch_requests/endpoint', {
-  headers: {
-    'Content-Type': 'application/json',
-    'x-access-token': accessToken
-  }
-})
+const fetchURL = new URL(`${API_BASE_URL}/api/zsmart_branch_requests/get_users_per_branch`, window.location.origin)
+fetchURL.searchParams.set('branch', branchCode)
 ```
+
+**Avoid hardcoding `http://localhost:5000`** — older views did this but the codebase is actively migrating to `API_BASE_URL`. Hardcoded URLs break when `VITE_API_BASE_URL` changes (e.g. production).
 
 **Using React Query** (modern approach, used in some views):
 ```js
@@ -330,7 +348,10 @@ dispatch({ type: 'setUser', role: 'Admin', accessToken: token })
 2. **Voting System**: Employee/candidate voting with statistics
 3. **Branch Record Management**: Transaction records and audit trails
 4. **Approval Workflow**: Multi-stage approval system (Maker → Teller → Authorizer → Auditor)
-5. **Reassignment**: Request reassignment between users
+5. **Reassignment**: Request reassignment between users (`Reassignment.js`, roles `Admin`/`Authorizer`)
+6. **Biometric / Fingerprint Registration** (`src/views/admin/BiometricRegistration/`): `BiometricRegistration.js` (Teller/Maker) captures fingerprints by connecting to a **local fingerprint WebSocket service** (`FINGERPRINT_WS_URL`, default `ws://localhost:8089`) — this is a separate desktop service, not the Express backend. `BiometricApproval.js` (Admin) approves enrollments.
+7. **Limit Management** (`src/views/admin/LimitManagement/`, Admin): transaction limit configuration
+8. **Pending Checker Approval** (`src/views/admin/PendingCheckerApproval/`, Authorizer/Admin): maker-checker second-approval queue
 
 ## Running the Full Stack
 
@@ -338,6 +359,7 @@ dispatch({ type: 'setUser', role: 'Admin', accessToken: token })
 1. **MongoDB** - Must be running on `localhost:27017`
 2. **Oracle Instant Client** (optional, for Flexcube integration)
 3. **Node.js 14+** for backend ES modules support
+4. **Fingerprint WebSocket service** (optional, for Biometric Registration) - local desktop service at `ws://localhost:8089` (`VITE_FINGERPRINT_WS_URL`)
 
 ### Starting Backend
 ```bash
