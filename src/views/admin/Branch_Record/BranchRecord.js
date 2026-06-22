@@ -29,7 +29,7 @@ import {
 } from '@mui/icons-material';
 import DownloadIcon from '@mui/icons-material/Download';
 import PreviewIcon from '@mui/icons-material/Preview';
-import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQuery, keepPreviousData } from '@tanstack/react-query';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { useSelector } from 'react-redux';
@@ -37,18 +37,24 @@ import { motion, AnimatePresence } from 'framer-motion';
 import DetailPanel from './DetailPanel';
 import { format } from 'date-fns';
 import { utils, writeFile } from 'xlsx';
-import { useNavigate } from 'react-router-dom';
 
 import StatisticsTab from './stat';
 import BranchStat from './BranchStat';
+import { ReceiptPreviewDialog } from './TransactionReceipt';
 import { API_BASE_URL } from 'src/config/api';
 
-// Create QueryClient OUTSIDE component to prevent recreation on every render
+// Create QueryClient OUTSIDE component to prevent recreation on every render.
+// Aggressive caching so navigating away and back is instant (no spinner, no
+// refetch) even when the backend returns a large transaction set.
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 30 * 1000, // 30 seconds
+      staleTime: 5 * 60 * 1000, // 5 minutes – data considered fresh, no refetch
+      gcTime: 30 * 60 * 1000, // keep cached data for 30 min after unmount
       refetchOnWindowFocus: false,
+      refetchOnMount: false, // reuse cache on remount instead of refetching
+      placeholderData: keepPreviousData, // show last data instantly while refetching
+      retry: 1,
     },
   },
 });
@@ -130,8 +136,9 @@ const BranchRecord = () => {
   const [entranceDirection, setEntranceDirection] = useState(1);
   const [rowSelection, setRowSelection] = useState({});
   const [activeTab, setActiveTab] = useState(0);
+  const [isReceiptOpen, setIsReceiptOpen] = useState(false);
+  const [receiptTransactions, setReceiptTransactions] = useState([]);
   const accessToken = useSelector((state) => state.user.accessToken);
-  const navigate = useNavigate();
 
   // Single data fetch shared across all tabs
   const { data: fetchData = [], isError, isLoading, refetch } = useQuery({
@@ -214,12 +221,14 @@ const BranchRecord = () => {
   }, [transactions]);
 
   const handlePreviewClick = useCallback(() => {
-    const selectedRowId = Object.keys(rowSelection)[0];
-    const selectedRow = transactions.find(tx => tx._id === selectedRowId);
-    if (selectedRow) {
-      navigate('/admin/experiance', { state: { rowData: selectedRow } });
+    const selectedIds = Object.keys(rowSelection);
+    // Preserve table order for the selected rows
+    const selected = transactions.filter((tx) => selectedIds.includes(tx._id));
+    if (selected.length > 0) {
+      setReceiptTransactions(selected);
+      setIsReceiptOpen(true);
     }
-  }, [rowSelection, transactions, navigate]);
+  }, [rowSelection, transactions]);
 
   const columns = useMemo(() => [
     {
@@ -470,7 +479,7 @@ const BranchRecord = () => {
       },
       filterFn: (row, columnId, filterValue) => !filterValue || row.getValue(columnId) === filterValue,
     },
-  ], [handleOpenDetail, transactions, navigate]);
+  ], [handleOpenDetail, transactions]);
 
   return (
     <>
@@ -483,7 +492,9 @@ const BranchRecord = () => {
           disabled={Object.keys(rowSelection).length === 0}
           sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 'bold' }}
         >
-          Preview
+          {Object.keys(rowSelection).length > 1
+            ? `Preview & Print (${Object.keys(rowSelection).length})`
+            : 'Preview & Print'}
         </Button>
         <Box sx={{ display: 'flex', gap: 2 }}>
           <Button
@@ -534,11 +545,22 @@ const BranchRecord = () => {
               onRowSelectionChange={setRowSelection}
               state={{ rowSelection, isLoading }}
               enableGrouping
+              // --- Performance: keep the grid fast even with large datasets ---
+              enablePagination
+              enableStickyHeader
+              initialState={{
+                density: 'compact',
+                pagination: { pageIndex: 0, pageSize: 25 },
+              }}
+              muiPaginationProps={{ rowsPerPageOptions: [25, 50, 100, 250] }}
+              muiTableContainerProps={{ sx: { maxHeight: '65vh' } }}
               muiTableBodyRowProps={({ row }) => ({
                 onClick: () => {
                   const status = row.original.status;
                   if (status === 'authorized' || status === 'posted') {
-                    setRowSelection((prev) => ({ [row.id]: !prev[row.id] }));
+                    // Toggle-accumulate so multiple rows can be selected for
+                    // multi-receipt preview/print and bulk audit.
+                    setRowSelection((prev) => ({ ...prev, [row.id]: !prev[row.id] }));
                   }
                 },
                 selected: rowSelection[row.id],
@@ -580,6 +602,13 @@ const BranchRecord = () => {
         onClose={() => setSelectedDetail(null)}
         data={selectedDetail || {}}
         entranceDirection={entranceDirection}
+      />
+
+      <ReceiptPreviewDialog
+        open={isReceiptOpen}
+        onClose={() => setIsReceiptOpen(false)}
+        transactions={receiptTransactions}
+        branchCode={branchCode}
       />
 
       <StyledDialog open={isConfirmationOpen} onClose={handleConfirmationClose}>
