@@ -295,7 +295,10 @@ export const TransactionReceipt = ({ tx = {}, branchCode }) => {
         <Field label="Account Holder" value={tx.acc_holder_name} />
         <Field label="Account Number" value={maskAccountNumber(tx.account_number)} />
         <Field label="Branch" value={tx.branch_name || branchCode} />
-        <Field label="Posted By" value={tx.posted_by} />
+        {/* Posted By falls back to the assigned teller — the assigned user is the
+            one who posts the transaction, so for records saved before posted_by
+            was captured, assigned_to is the correct poster. */}
+        <Field label="Posted By" value={tx.posted_by || tx.assigned_to} />
         <Field label="Request Date" value={tx.request_date ? formatDateTime(tx.request_date) : null} />
         <Field label="Posted Date" value={tx.posted_date ? formatDateTime(tx.posted_date) : null} />
       </div>
