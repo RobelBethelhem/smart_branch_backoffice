@@ -83,9 +83,11 @@ const Login = () => {
       if (response.ok) {
         const decodedAccessToken = jwtDecode(data.accessToken);
         const userRole = decodedAccessToken.roles[0];
-        dispatch({ 
-          type: 'setUser', 
+        dispatch({
+          type: 'setUser',
           role: userRole,
+          name: decodedAccessToken.user, // user name — required as posted_by when posting transactions
+          branch: decodedAccessToken.branch,
           accessToken: data.accessToken,
           refreshToken: data.refreshToken
         });

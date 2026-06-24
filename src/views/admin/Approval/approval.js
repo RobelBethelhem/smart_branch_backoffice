@@ -8,6 +8,7 @@ import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tan
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { useSelector } from 'react-redux';
+import { jwtDecode } from 'jwt-decode';
 import SendIcon from '@mui/icons-material/Send';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import CalculateIcon from '@mui/icons-material/Calculate';
@@ -65,7 +66,19 @@ const Example = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [transactionRef, setTransactionRef] = useState('');
   const accessToken = useSelector((state) => state.user.accessToken);
-  const userName = useSelector((state) => state.user.name);
+  const storedUserName = useSelector((state) => state.user.name);
+  // posted_by is mandatory when posting. Fall back to the name embedded in the
+  // JWT (`user` claim) so sessions that logged in before the name was persisted
+  // — and were never re-issued a token — still resolve a valid poster.
+  const userName = useMemo(() => {
+    if (storedUserName) return storedUserName;
+    if (!accessToken) return undefined;
+    try {
+      return jwtDecode(accessToken)?.user;
+    } catch {
+      return undefined;
+    }
+  }, [storedUserName, accessToken]);
   const queryClientHook = useQueryClient();
 
   // Denomination state for Deposit/Withdraw
@@ -248,6 +261,17 @@ const Example = () => {
   const handleDialogSubmit = async () => {
     if (!selectedTransaction) return;
 
+    // A transaction can only be posted by an identified user — posted_by is
+    // mandatory. Block the post if we cannot resolve a poster name.
+    if (!userName) {
+      toast.error('Cannot post: your user name is missing. Please log out and log in again.', {
+        position: "top-right",
+        autoClose: 4000,
+        theme: "colored",
+      });
+      return;
+    }
+
     // Validate denomination for Deposit/Withdraw
     if (needsDenomination && !denominationMatches) {
       toast.error(`Denomination total (${denominationTotal.toFixed(2)}) does not match amount (${expectedAmount.toFixed(2)})`, {
@@ -264,6 +288,7 @@ const Example = () => {
       let endpoint = `${API_BASE_URL}/api/zsmart_branch_requests/transaction_posted`;
       let body = {
         transaction_id: selectedTransaction._id,
+        posted_by: userName,
       };
 
       // Use denomination endpoint for Deposit/Withdraw/ECheck

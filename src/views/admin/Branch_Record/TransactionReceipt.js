@@ -84,6 +84,72 @@ const formatAmount = (amount, currency = 'ETB') => {
   return `${currency} ${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
+// Mask an account number, keeping only the last 4 digits visible.
+// e.g. "1000123456789" -> "•••••••••6789". Short values (<=4) are left as-is
+// since there is nothing meaningful left to reveal once masked.
+const maskAccountNumber = (acc) => {
+  if (acc === null || acc === undefined || acc === '') return acc;
+  const str = String(acc).trim();
+  if (str.length <= 4) return str;
+  return '•'.repeat(str.length - 4) + str.slice(-4);
+};
+
+// --- Number to words (for the legal "amount in words" line on the receipt) ---
+const ONES = [
+  '', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
+  'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen',
+];
+const TENS = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+const SCALES = ['', 'Thousand', 'Million', 'Billion', 'Trillion'];
+
+const threeDigitsToWords = (n) => {
+  let str = '';
+  const hundreds = Math.floor(n / 100);
+  const rest = n % 100;
+  if (hundreds) str += `${ONES[hundreds]} Hundred`;
+  if (rest) {
+    if (str) str += ' ';
+    if (rest < 20) {
+      str += ONES[rest];
+    } else {
+      str += TENS[Math.floor(rest / 10)];
+      if (rest % 10) str += `-${ONES[rest % 10]}`;
+    }
+  }
+  return str;
+};
+
+const numberToWords = (value) => {
+  let n = Math.floor(Math.abs(value));
+  if (n === 0) return 'Zero';
+  const groups = [];
+  while (n > 0) {
+    groups.push(n % 1000);
+    n = Math.floor(n / 1000);
+  }
+  let words = '';
+  for (let i = groups.length - 1; i >= 0; i--) {
+    if (groups[i] === 0) continue;
+    const chunk = threeDigitsToWords(groups[i]);
+    words += (words ? ' ' : '') + chunk + (SCALES[i] ? ` ${SCALES[i]}` : '');
+  }
+  return words.trim();
+};
+
+// "1250.50" -> "One Thousand Two Hundred Fifty Birr and Fifty Cents Only"
+const amountToWords = (amount, currency = 'ETB') => {
+  const num = Number(amount);
+  if (isNaN(num)) return '';
+  const currencyName = currency === 'ETB' ? 'Birr' : currency;
+  const whole = Math.floor(num);
+  const cents = Math.round((num - whole) * 100);
+  const parts = [];
+  if (whole > 0) parts.push(`${numberToWords(whole)} ${currencyName}`);
+  if (cents > 0) parts.push(`${numberToWords(cents)} Cent${cents > 1 ? 's' : ''}`);
+  if (parts.length === 0) parts.push(`Zero ${currencyName}`);
+  return `${parts.join(' and ')} Only`;
+};
+
 const Field = ({ label, value }) => {
   if (value === null || value === undefined || value === '') return null;
   return (
@@ -197,6 +263,26 @@ export const TransactionReceipt = ({ tx = {}, branchCode }) => {
         </div>
       </div>
 
+      {/* Amount in words */}
+      {tx.amount_in_figures !== null && tx.amount_in_figures !== undefined && tx.amount_in_figures !== '' && (
+        <div
+          style={{
+            margin: '8px 20px 0 20px',
+            padding: '6px 12px',
+            background: '#fafbfc',
+            border: '1px solid #eef1f5',
+            borderRadius: 6,
+          }}
+        >
+          <span style={{ fontSize: 9.5, color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.4 }}>
+            Amount in words:{' '}
+          </span>
+          <span style={{ fontSize: 11.5, color: '#111827', fontWeight: 600, fontStyle: 'italic' }}>
+            {amountToWords(tx.amount_in_figures, currency)}
+          </span>
+        </div>
+      )}
+
       {/* Details grid */}
       <div
         style={{
@@ -207,7 +293,7 @@ export const TransactionReceipt = ({ tx = {}, branchCode }) => {
         }}
       >
         <Field label="Account Holder" value={tx.acc_holder_name} />
-        <Field label="Account Number" value={tx.account_number} />
+        <Field label="Account Number" value={maskAccountNumber(tx.account_number)} />
         <Field label="Branch" value={tx.branch_name || branchCode} />
         <Field label="Posted By" value={tx.posted_by} />
         <Field label="Request Date" value={tx.request_date ? formatDateTime(tx.request_date) : null} />
@@ -233,7 +319,7 @@ export const TransactionReceipt = ({ tx = {}, branchCode }) => {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 24px' }}>
             <Field label="Beneficiary Name" value={tx.beneficiary_name} />
-            <Field label="Beneficiary Account" value={tx.beneficiary_account_number} />
+            <Field label="Beneficiary Account" value={maskAccountNumber(tx.beneficiary_account_number)} />
             <Field label="Beneficiary Bank" value={tx.beneficiary_bank} />
             <Field label="Beneficiary Branch" value={tx.beneficiary_branch} />
           </div>
