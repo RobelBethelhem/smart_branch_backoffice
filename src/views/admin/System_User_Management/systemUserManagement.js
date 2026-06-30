@@ -1,4 +1,4 @@
-import React,{ useMemo, useState ,useCallback  } from 'react';
+import React,{ useMemo, useState ,useCallback, useEffect  } from 'react';
 import {
   MRT_EditActionButtons,
   MaterialReactTable,
@@ -195,9 +195,16 @@ const Example = () => {
   const [columnFilters, setColumnFilters] = useState([]);
   const [globalFilter, setGlobalFilter] = useState('');
   const [sorting, setSorting] = useState([]);
+  const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 10 });
   const [openDeleteModal, setOpenDeleteModal] = useState(false);
   const [selectedRow, setSelectedRow] = useState(null);
   const [isExcelImportOpen, setIsExcelImportOpen] = useState(false);
+
+  // With server-side paging, jump back to the first page when a filter/search
+  // changes so the user isn't stranded on a now-empty page.
+  useEffect(() => {
+    setPagination((p) => (p.pageIndex === 0 ? p : { ...p, pageIndex: 0 }));
+  }, [columnFilters, globalFilter]);
 
   const {
     data: fetchData = { data: [], meta: {} },
@@ -206,13 +213,16 @@ const Example = () => {
     isLoading,
     refetch,
   } = useQuery({
-    queryKey: ['table-data', columnFilters, globalFilter, sorting],
+    queryKey: ['table-data', columnFilters, globalFilter, sorting, pagination],
     queryFn: async () => {
       const fetchURL = new URL(`${API_BASE_URL}/api/getUsers`, window.location.origin);
 
       fetchURL.searchParams.set('filters', JSON.stringify(columnFilters ?? []));
       fetchURL.searchParams.set('globalFilter', globalFilter ?? '');
       fetchURL.searchParams.set('sorting', JSON.stringify(sorting ?? []));
+      // Server-side pagination: backend returns this page + meta.totalRowCount.
+      fetchURL.searchParams.set('start', `${pagination.pageIndex * pagination.pageSize}`);
+      fetchURL.searchParams.set('size', `${pagination.pageSize}`);
 
       const response = await fetch(fetchURL.href, {
         headers: {
@@ -400,6 +410,14 @@ const Example = () => {
   const table = useMaterialReactTable({
     columns,
     data, // Ensure data is passed here
+    // Server-side data: the backend (/getUsers) does the filtering, sorting and
+    // paging, returning one page + meta.totalRowCount. This stops loading the
+    // entire user collection into the browser.
+    manualPagination: true,
+    manualFiltering: true,
+    manualSorting: true,
+    rowCount: meta?.totalRowCount ?? 0,
+    onPaginationChange: setPagination,
     paginationDisplayMode: 'pages',
     enableColumnOrdering: true,
     enableGrouping: true,
@@ -492,6 +510,7 @@ const Example = () => {
       showAlertBanner: isError,
       showProgressBars: isRefetching,
       sorting,
+      pagination,
     },
   });
 
