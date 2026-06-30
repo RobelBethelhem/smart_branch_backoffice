@@ -70,9 +70,18 @@ export default defineConfig(({ mode }) => {
       ],
       extensions: ['.mjs', '.js', '.ts', '.jsx', '.tsx', '.json', '.scss'],
     },
+    // Shared /api proxy used by both the dev server and the preview server.
+    // It forwards /api/* to the Express backend (VITE_API_BASE_URL) and strips
+    // the leading /api so /api/api/login -> /api/login on the backend.
     server: {
+      // 0.0.0.0 binds every network interface so the app is reachable at the
+      // server's LAN IP (e.g. http://10.1.1.181:4000), not just localhost.
       host: '0.0.0.0',
       port: 4000,
+      // Permit requests whose Host header is the server IP/hostname. Without
+      // this, newer Vite versions reject LAN access with
+      // "Blocked request. This host is not allowed."
+      allowedHosts: true,
       proxy: {
         '/api': {
           target: env.VITE_API_BASE_URL || 'http://localhost:5000/',
@@ -80,6 +89,20 @@ export default defineConfig(({ mode }) => {
           rewrite: (path) => path.replace(/^\/api/, '')
         },
         // https://vitejs.dev/config/server-options.html
+      },
+    },
+    // `npm run serve` (vite preview of the production build) — same IP access +
+    // /api proxy so the built app behaves like the dev server when deployed.
+    preview: {
+      host: '0.0.0.0',
+      port: 4000,
+      allowedHosts: true,
+      proxy: {
+        '/api': {
+          target: env.VITE_API_BASE_URL || 'http://localhost:5000/',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api/, '')
+        },
       },
     },
   }
