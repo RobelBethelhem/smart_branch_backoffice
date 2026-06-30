@@ -742,8 +742,22 @@ const SearchComponent = () => {
   const handleOpenDetail = useCallback((data) => {
     const randomDirection = Math.floor(Math.random() * 2) + 1;
     setEntranceDirection(randomDirection);
-    setSelectedDetail(data);
-  }, []);
+    setSelectedDetail(data); // show immediately (transaction fields + signature)
+    // Fetch customer images on demand — kept OFF the high-traffic search path,
+    // which no longer returns profile_image/sign_image.
+    if (data?.account_number) {
+      fetch(`${API_BASE_URL}/api/zsmart_branch_requests/account_images/${encodeURIComponent(data.account_number)}`, {
+        headers: { 'Content-Type': 'application/json', 'x-access-token': accessToken },
+      })
+        .then((r) => r.json())
+        .then((json) => {
+          if (!json.error && json.data) {
+            setSelectedDetail((prev) => (prev && prev._id === data._id ? { ...prev, ...json.data } : prev));
+          }
+        })
+        .catch(() => {});
+    }
+  }, [accessToken]);
 
   const handleAssignToMe = async () => {
     try {
