@@ -344,6 +344,7 @@ const Example = () => {
   const {
     data: fetchData = { data: [], meta: {} },
     isError,
+    error,
     isRefetching,
     isLoading,
     refetch,
@@ -351,7 +352,7 @@ const Example = () => {
     queryKey: ['table-data', columnFilters, globalFilter, sorting],
     queryFn: async () => {
       const fetchURL = new URL(`${API_BASE_URL}/api/zsmart_branch_requests/get_users_per_branch`, window.location.origin);
-      
+
       // Set search params before making the request
       fetchURL.searchParams.set('filters', JSON.stringify(columnFilters ?? []));
       fetchURL.searchParams.set('globalFilter', globalFilter ?? '');
@@ -364,6 +365,13 @@ const Example = () => {
       });
 
       const json = await response.json();
+      // Surface server failures (401/403/400/500 or { error:true }) as a real
+      // query error instead of silently returning an error object — otherwise
+      // the component tried to .map() a payload with no `data` array and the
+      // whole view rendered blank with no explanation.
+      if (!response.ok || json?.error) {
+        throw new Error(json?.message || `Failed to load users (HTTP ${response.status})`);
+      }
       return json;
     },
     placeholderData: keepPreviousData,
@@ -379,7 +387,9 @@ const Example = () => {
 
   // Synchronize fetched data with local tableData state
   useEffect(() => {
-    if (fetchData) {
+    // Guard against error/unexpected payloads (e.g. { error, message }) where
+    // `data` is not an array — previously this threw and blanked the page.
+    if (Array.isArray(fetchData?.data)) {
       const processedData = fetchData.data.map((row, index) => ({
         ...row,
         id: row.id || `row-${index}`, // Assign unique string ID
@@ -670,7 +680,7 @@ const Example = () => {
     muiToolbarAlertBannerProps: isError
       ? {
           color: 'error',
-          children: 'Error loading data',
+          children: error?.message || 'Error loading data',
         }
       : undefined,
     onColumnFiltersChange: setColumnFilters,
