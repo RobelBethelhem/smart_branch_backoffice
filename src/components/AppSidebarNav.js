@@ -7,7 +7,7 @@ import 'simplebar-react/dist/simplebar.min.css'
 
 import { CBadge, CNavLink, CSidebarNav } from '@coreui/react'
 
-export const AppSidebarNav = ({ items }) => {
+const AppSidebarNavBase = ({ items }) => {
   const navLink = (name, icon, badge, indent = false) => {
     return (
       <>
@@ -64,6 +64,12 @@ export const AppSidebarNav = ({ items }) => {
   )
 }
 
-AppSidebarNav.propTypes = {
+AppSidebarNavBase.propTypes = {
   items: PropTypes.arrayOf(PropTypes.any).isRequired,
 }
+
+// Memoized so the recursive nav subtree skips re-render when only sidebar
+// visibility/unfoldable state changes upstream. With the memoized `items` ref
+// from AppSidebar this is an effective bail-out. Active-link highlighting is
+// unaffected: NavLink subscribes to router context independently.
+export const AppSidebarNav = React.memo(AppSidebarNavBase)

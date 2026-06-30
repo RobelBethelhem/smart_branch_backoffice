@@ -29,7 +29,6 @@ import {
 } from '@tanstack/react-query';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
-import * as XLSX from 'xlsx';
 import { useDropzone } from 'react-dropzone';
 import Autocomplete from '@mui/material/Autocomplete';
 import SearchIcon from '@mui/icons-material/Search';
@@ -252,6 +251,8 @@ const ExcelImportDialog = ({ open, onClose, onImport }) => {
 
     const reader = new FileReader();
     reader.onload = async (e) => {
+      // Load xlsx on-demand only when a user actually imports a spreadsheet.
+      const XLSX = await import('xlsx');
       const data = new Uint8Array(e.target.result);
       const workbook = XLSX.read(data, { type: 'array' });
       const sheetName = workbook.SheetNames[0];
@@ -366,6 +367,11 @@ const Example = () => {
       return json;
     },
     placeholderData: keepPreviousData,
+    // Avoid refetching the whole user list on every mount/window-focus.
+    // Explicit refetch() and invalidateQueries bypass staleTime, so post-edit
+    // refreshes still happen immediately; this only suppresses incidental
+    // focus/mount refetch storms.
+    staleTime: 30 * 1000,
   });
 
   // Manage local state for table data to handle real-time updates
@@ -378,7 +384,6 @@ const Example = () => {
         ...row,
         id: row.id || `row-${index}`, // Assign unique string ID
       }));
-      console.log("Processed Data with IDs:", processedData); // Debugging log
       setTableData(processedData);
     }
   }, [fetchData]);
@@ -411,8 +416,13 @@ const Example = () => {
         throw new Error('Invalid Till IDs format received from server');
       }
     },
-    staleTime: 0,
-    cacheTime: 0,
+    // Till IDs are static reference data. Previously staleTime:0 forced a
+    // refetch on every mount/window-focus, and cacheTime is not even a valid
+    // React Query v5 option (it was renamed to gcTime), so it was silently
+    // ignored. Cache for 5 min and keep for 30 min; explicit refetch()/
+    // invalidate still bypass staleTime, so freshness on demand is unchanged.
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
     enabled: !!accessToken,
   });
 
@@ -585,7 +595,6 @@ const Example = () => {
   };
 
   const handleSaveUser = async ({ values, table }) => {
-    console.log("Saving User with Values:", values);
     // Ensure roles is always an array for the backend
     const rolesArray = Array.isArray(values.roles) ? values.roles : (values.roles ? [values.roles] : []);
     const updatedValues = {
@@ -595,8 +604,6 @@ const Example = () => {
       till_id: values.till_id,
       roles: rolesArray,
     };
-
-    console.log('Updated Values for Saving:', updatedValues);
 
     const newValidationErrors = validateUser(updatedValues);
     const hasErrors = Object.values(newValidationErrors).some(error => error);
@@ -708,7 +715,6 @@ const Example = () => {
     },
     meta: {
       updateData: (rowId, columnId, value) => {
-        console.log(`Updating row ${rowId}, column ${columnId} to value ${value}`); // Debugging log
         setTableData((oldData) =>
           oldData.map((row) => {
             if (row.id === rowId) {
@@ -896,7 +902,6 @@ const validateEmail = (email) =>
   );
 
 function validateUser(user) {
-  console.log("Validating User:", user);
   // roles is an array like ["Teller"]
   const hasRole = Array.isArray(user.roles) ? user.roles.length > 0 : !!user.roles;
   const firstRole = Array.isArray(user.roles) ? user.roles[0] : user.roles;

@@ -3,6 +3,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Box, Paper, Typography, IconButton } from '@mui/material';
 import { X as CloseIcon } from 'lucide-react';
 
+// Shared transaction detail slide-over panel. Previously this exact file was
+// duplicated byte-for-byte under Approval/, Authorize/, Audit/, Reassignment/
+// and Branch_Record/. Consolidated into one memoized component to remove the
+// redundant bundle weight and eliminate drift between copies.
 const DetailPanel = ({ isOpen, onClose, data, entranceDirection }) => {
   const [isSignatureModalOpen, setIsSignatureModalOpen] = useState(false);
   const [selectedSignature, setSelectedSignature] = useState(null);
@@ -240,7 +244,7 @@ const DetailPanel = ({ isOpen, onClose, data, entranceDirection }) => {
   const formatNestedObject = (obj) => {
     try {
       const parsedObj = typeof obj === 'string' ? JSON.parse(obj) : obj;
-      
+
       return (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
           {Object.entries(parsedObj).map(([key, value]) => (
@@ -494,4 +498,4 @@ const DetailPanel = ({ isOpen, onClose, data, entranceDirection }) => {
   );
 };
 
-export default DetailPanel;
+export default React.memo(DetailPanel);

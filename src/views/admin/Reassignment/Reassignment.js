@@ -23,7 +23,7 @@ import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { useSelector } from 'react-redux';
 import { motion } from 'framer-motion';
-import DetailPanel from './DetailPanel';
+import DetailPanel from 'src/components/DetailPanel';
 import { API_BASE_URL } from 'src/config/api';
 
 // Styled components for the dialog

@@ -28,9 +28,10 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, ChartToolti
 
 const CHART_COLORS = ['#3498db', '#2ecc71', '#e74c3c', '#f39c12', '#9b59b6', '#1abc9c', '#e67e22', '#34495e'];
 
-const formatCurrency = (amount) => {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'ETB', maximumFractionDigits: 0 }).format(amount);
-};
+// Build the formatter once instead of per-call (formatters run repeatedly
+// during chart hover/redraw).
+const CURRENCY_FORMAT = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'ETB', maximumFractionDigits: 0 });
+const formatCurrency = (amount) => CURRENCY_FORMAT.format(amount);
 
 // Mini stat card
 const MiniCard = ({ title, value, icon, color, delay = 0 }) => (

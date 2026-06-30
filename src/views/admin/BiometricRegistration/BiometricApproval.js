@@ -294,8 +294,12 @@ const BiometricApproval = () => {
     },
   })
 
-  // Count pending approvals
-  const pendingCount = fetchData.filter((b) => b.status === 'pending').length
+  // Count pending approvals (memoized so the full-array scan only runs when the
+  // data changes, not on every render such as each isProcessing toggle).
+  const pendingCount = useMemo(
+    () => fetchData.filter((b) => b.status === 'pending').length,
+    [fetchData]
+  )
 
   return (
     <>

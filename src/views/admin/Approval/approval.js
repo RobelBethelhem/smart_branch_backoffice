@@ -15,7 +15,7 @@ import CalculateIcon from '@mui/icons-material/Calculate';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import WarningIcon from '@mui/icons-material/Warning';
 import { motion } from 'framer-motion';
-import DetailPanel from './DetailPanel'; // Adjust the path if necessary
+import DetailPanel from 'src/components/DetailPanel';
 import { API_BASE_URL } from 'src/config/api';
 
 // Ethiopian Birr Denominations

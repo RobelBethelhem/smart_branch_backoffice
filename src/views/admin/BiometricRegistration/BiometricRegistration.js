@@ -198,8 +198,19 @@ const BiometricRegistration = () => {
   const disconnectFromService = useCallback(() => {
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current)
+      reconnectTimeoutRef.current = null
     }
     if (wsRef.current) {
+      // Detach handlers BEFORE close(). Otherwise the async `onclose` still
+      // fires on an intentional disconnect and (with a stale isDialogOpen
+      // closure) re-arms a reconnect timer + opens a new socket — leaking one
+      // live socket + timer per open/close cycle across a long branch session.
+      // Auto-reconnect on UNEXPECTED drops is preserved: that path never calls
+      // disconnectFromService, so its socket keeps its onclose handler.
+      wsRef.current.onopen = null
+      wsRef.current.onmessage = null
+      wsRef.current.onclose = null
+      wsRef.current.onerror = null
       wsRef.current.close()
       wsRef.current = null
     }
@@ -222,39 +233,46 @@ const BiometricRegistration = () => {
 
   // Auto-fetch customer when CIF is 7 digits
   useEffect(() => {
+    if (cif.length !== 7) {
+      setCustomerName('')
+      setCustomerError('')
+      return undefined
+    }
+    // Abort the in-flight lookup when CIF changes or the view unmounts, so a
+    // slow/superseded response can't overwrite newer state (fast-typing race)
+    // or setState after unmount.
+    const controller = new AbortController()
     const fetchCustomer = async () => {
-      if (cif.length === 7) {
-        setIsFetchingCustomer(true)
-        setCustomerError('')
-        setCustomerName('')
-        try {
-          const response = await fetch(
-            `${API_BASE_URL}/api/zsmart_branch_requests/biometric/customer/${cif}`,
-            {
-              headers: { 'Content-Type': 'application/json', 'x-access-token': accessToken },
-            }
-          )
-          const result = await response.json()
-          if (response.ok && !result.error) {
-            setCustomerName(result.data.customer_name || '')
-            if (!result.data.customer_name) {
-              setCustomerError('Customer not found in Flexcube')
-            }
-          } else {
-            setCustomerError(result.message || 'Failed to fetch customer')
+      setIsFetchingCustomer(true)
+      setCustomerError('')
+      setCustomerName('')
+      try {
+        const response = await fetch(
+          `${API_BASE_URL}/api/zsmart_branch_requests/biometric/customer/${cif}`,
+          {
+            headers: { 'Content-Type': 'application/json', 'x-access-token': accessToken },
+            signal: controller.signal,
           }
-        } catch (error) {
-          setCustomerError('Error fetching customer: ' + error.message)
-        } finally {
-          setIsFetchingCustomer(false)
+        )
+        const result = await response.json()
+        if (response.ok && !result.error) {
+          setCustomerName(result.data.customer_name || '')
+          if (!result.data.customer_name) {
+            setCustomerError('Customer not found in Flexcube')
+          }
+        } else {
+          setCustomerError(result.message || 'Failed to fetch customer')
         }
-      } else {
-        setCustomerName('')
-        setCustomerError('')
+      } catch (error) {
+        if (error.name === 'AbortError') return
+        setCustomerError('Error fetching customer: ' + error.message)
+      } finally {
+        if (!controller.signal.aborted) setIsFetchingCustomer(false)
       }
     }
 
     fetchCustomer()
+    return () => controller.abort()
   }, [cif, accessToken])
 
   const captureFingerprint = () => {

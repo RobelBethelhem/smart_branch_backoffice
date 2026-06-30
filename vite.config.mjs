@@ -9,6 +9,34 @@ export default defineConfig(({ mode }) => {
     base: './',
     build: {
       outDir: 'build',
+      // Split heavy third-party code into stable vendor chunks so a change in
+      // app code (or a single dependency bump) doesn't invalidate the entire
+      // cached bundle for every returning user. Greatly improves repeat-visit
+      // cache hit rate across the branch fleet.
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+            'mui-vendor': [
+              '@mui/material',
+              '@mui/icons-material',
+              '@mui/x-date-pickers',
+              '@emotion/react',
+              '@emotion/styled',
+            ],
+            'coreui-vendor': [
+              '@coreui/react',
+              '@coreui/coreui',
+              '@coreui/icons-react',
+              '@coreui/utils',
+            ],
+            'table-vendor': ['material-react-table'],
+            'charts-vendor': ['recharts', 'chart.js', 'react-chartjs-2'],
+            'pdf-vendor': ['jspdf', 'html2canvas'],
+            'xlsx-vendor': ['xlsx'],
+          },
+        },
+      },
     },
     css: {
       postcss: {
@@ -23,7 +51,8 @@ export default defineConfig(({ mode }) => {
       exclude: [],
     },
     optimizeDeps: {
-      force: true,
+      // `force: true` re-bundled deps on every dev start (slow cold start) with
+      // no production benefit. Vite already re-optimizes when deps change.
       esbuildOptions: {
         loader: {
           '.js': 'jsx',

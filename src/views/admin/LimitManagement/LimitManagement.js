@@ -97,6 +97,9 @@ const CustomerCategoryLimitTab = () => {
       if (result.error) throw new Error(result.message)
       return result.data.map((item) => item.CUSTOMER_CATEGORY)
     },
+    // Flexcube customer categories are reference data; cache so tab switches
+    // don't refetch them every time. Mutations invalidate explicitly.
+    staleTime: 5 * 60 * 1000,
   })
 
   // Fetch customer category limits
@@ -119,6 +122,9 @@ const CustomerCategoryLimitTab = () => {
       if (result.error) throw new Error(result.message)
       return result.data
     },
+    // Cache briefly so rapid tab toggling doesn't trigger a refetch each time;
+    // create/update/delete mutations invalidate this key so edits show instantly.
+    staleTime: 60 * 1000,
   })
 
   // Create mutation

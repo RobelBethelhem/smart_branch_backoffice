@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
 
 import routes from '../routes'
@@ -7,7 +7,12 @@ import { CBreadcrumb, CBreadcrumbItem } from '@coreui/react'
 
 const AppBreadcrumb = () => {
   const currentLocation = useLocation().pathname
-  localStorage.setItem("Location", currentLocation);
+  // Persist as a side-effect after render instead of synchronously during
+  // render (a render must be pure; the synchronous write blocked the main
+  // thread on every navigation). Same value is stored, just post-commit.
+  useEffect(() => {
+    localStorage.setItem('Location', currentLocation)
+  }, [currentLocation])
 
   const getRouteName = (pathname, routes) => {
     const currentRoute = routes.find((route) => route.path === pathname)

@@ -22,9 +22,11 @@ import { motion } from 'framer-motion';
 
 const COLORS = ['#3498db', '#2ecc71', '#e74c3c', '#f39c12', '#9b59b6', '#1abc9c', '#e67e22'];
 
-const formatCurrency = (amount) => {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'ETB', maximumFractionDigits: 0 }).format(amount);
-};
+// Construct the formatter once at module load. It was previously allocated on
+// every call, and recharts invokes formatters repeatedly during hover/redraw,
+// so building a new Intl.NumberFormat each time was needless churn.
+const CURRENCY_FORMAT = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'ETB', maximumFractionDigits: 0 });
+const formatCurrency = (amount) => CURRENCY_FORMAT.format(amount);
 
 // Reusable stat card component
 const StatCard = ({ title, value, subtitle, icon, gradient, delay = 0 }) => (

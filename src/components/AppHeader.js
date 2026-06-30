@@ -36,10 +36,15 @@ const AppHeader = () => {
   const sidebarShow = useSelector((state) => state.sidebarShow)
 
   useEffect(() => {
-    document.addEventListener('scroll', () => {
+    // Named, passive handler with cleanup. The previous anonymous listener was
+    // never removed, so a new one accumulated on every header mount (e.g. each
+    // logout/login cycle) and ran unthrottled on every scroll event.
+    const handleScroll = () => {
       headerRef.current &&
         headerRef.current.classList.toggle('shadow-sm', document.documentElement.scrollTop > 0)
-    })
+    }
+    document.addEventListener('scroll', handleScroll, { passive: true })
+    return () => document.removeEventListener('scroll', handleScroll)
   }, [])
 
   return (

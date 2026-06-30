@@ -34,9 +34,8 @@ import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { useSelector } from 'react-redux';
 import { motion, AnimatePresence } from 'framer-motion';
-import DetailPanel from './DetailPanel';
+import DetailPanel from 'src/components/DetailPanel';
 import { format } from 'date-fns';
-import { utils, writeFile } from 'xlsx';
 
 import StatisticsTab from './stat';
 import BranchStat from './BranchStat';
@@ -192,7 +191,10 @@ const BranchRecord = () => {
     }
   };
 
-  const handleExport = useCallback((type = 'xlsx') => {
+  const handleExport = useCallback(async (type = 'xlsx') => {
+    // Load the heavy xlsx library on-demand (only when the user actually
+    // exports) instead of pulling its ~900KB into the route chunk for everyone.
+    const { utils, writeFile } = await import('xlsx');
     const exportData = transactions.map(row => ({
       'Transaction Type': row.transactionType,
       'Account Number': row.account_number,

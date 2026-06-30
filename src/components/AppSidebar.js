@@ -26,7 +26,11 @@ const AppSidebar = () => {
   const sidebarShow = useSelector((state) => state.sidebarShow)
   const userRole = useSelector((state) => state.user.role)
 
-  const navigation = _nav(userRole)
+  // _nav() rebuilds the full menu array AND instantiates new <CIcon> elements
+  // on every call; memoize so the recursive nav tree only rebuilds when the
+  // user's role changes (effectively once per session) rather than on every
+  // sidebar toggle.
+  const navigation = React.useMemo(() => _nav(userRole), [userRole])
 
   return (
     <CSidebar

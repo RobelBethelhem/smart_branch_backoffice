@@ -29,14 +29,15 @@ import {
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import axios from 'axios';
-import * as XLSX from 'xlsx';
 import { useDropzone } from 'react-dropzone';
 
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { API_BASE_URL } from 'src/config/api';
 
-
+// Compiled once at module load instead of re-allocated for every row during
+// .xlsx validation.
+const NAME_REGEX = /^[a-zA-Z\s-]+$/;
 
 const ExcelImportDialog = ({ open, onClose, onImport }) => {
   const [file, setFile] = useState(null);
@@ -88,20 +89,19 @@ const ExcelImportDialog = ({ open, onClose, onImport }) => {
       }
 
       // Check for numbers and special characters
-      const nameRegex = /^[a-zA-Z\s-]+$/;
-      if (!nameRegex.test(row.first_name)) { ['first_name', 'last_name', 'employee_id', 'user', 'email', 'position','department','roles' ]
+      if (!NAME_REGEX.test(row.first_name)) {
         errors.push(`Row ${i + 2}: first_name should not contain numbers or special characters`);
       }
-      if (!nameRegex.test(row.position)) {
+      if (!NAME_REGEX.test(row.position)) {
         errors.push(`Row ${i + 2}: position should not contain numbers or special characters`);
       }
-      if (!nameRegex.test(row.roles)) {
+      if (!NAME_REGEX.test(row.roles)) {
         errors.push(`Row ${i + 2}: roles should not contain numbers or special characters`);
       }
-      if (!nameRegex.test(row.last_name)) {
+      if (!NAME_REGEX.test(row.last_name)) {
         errors.push(`Row ${i + 2}: last_name should not contain numbers or special characters`);
       }
-      if (!nameRegex.test(row.department)) {
+      if (!NAME_REGEX.test(row.department)) {
         errors.push(`Row ${i + 2}: department should not contain numbers or special characters`);
       }
       // if (!nameRegex.test(row.position)) {
@@ -126,6 +126,9 @@ const ExcelImportDialog = ({ open, onClose, onImport }) => {
 
     const reader = new FileReader();
     reader.onload = async (e) => {
+      // Load xlsx on-demand (only when a user actually imports a file) rather
+      // than shipping it in the admin route chunk for everyone.
+      const XLSX = await import('xlsx');
       const data = new Uint8Array(e.target.result);
       const workbook = XLSX.read(data, { type: 'array' });
       const sheetName = workbook.SheetNames[0];

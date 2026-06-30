@@ -681,10 +681,10 @@ const SearchComponent = () => {
   const accessToken = useSelector((state) => state.user.accessToken);
   const userRole = useSelector((state) => state.user.role)
 
-  useEffect(() => {
-    // Fetch initial data without query
-    fetchData();
-  }, []);
+  // NOTE: the previous mount-time fetchData() was removed. The results table is
+  // hidden until the user clicks Search (showTable), and Search re-fetches with
+  // the query — so the eager mount fetch downloaded the full transactions list
+  // on the post-login landing page for every user without ever displaying it.
 
   useEffect(() => {
     const newLetters = searchTerm.split('').map((char, index) => ({

@@ -16,8 +16,9 @@ import { QRCodeSVG } from 'qrcode.react';
 import QRCodeWithLogo from './QRCodeWithLogo';
 import './spaced.css';
 import AutoResizeInput  from "./AutoResizeInput "
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
+// html2canvas (~250KB) and jsPDF (~560KB) are loaded on-demand inside the
+// print/download handlers so they never sit in this route's chunk for users
+// who only view the letter.
 import { useLocation } from 'react-router-dom';
 import Confetti from 'react-confetti'; 
 
@@ -165,10 +166,11 @@ const Guarenty_Letter = () => {
 
   const printRef = React.useRef();
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
     const content = printRef.current;
-    
-    html2canvas(content, { 
+    const { default: html2canvas } = await import('html2canvas');
+
+    html2canvas(content, {
       scale: 2,
       useCORS: true,
       allowTaint: true,
@@ -226,9 +228,13 @@ const Guarenty_Letter = () => {
     });
   };
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     const input = printRef.current;
-    html2canvas(input, { 
+    const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
+      import('html2canvas'),
+      import('jspdf'),
+    ]);
+    html2canvas(input, {
       scale: 2,
       useCORS: true,
       allowTaint: true,

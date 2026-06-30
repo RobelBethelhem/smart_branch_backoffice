@@ -12,6 +12,10 @@ const DefaultLayout = React.lazy(() => import('./layout/DefaultLayout'))
 // Pages
 const Login = React.lazy(() => import('./views/pages/login/Login'))
 
+// Hoisted to a stable module-level reference. As an inline literal it was a new
+// array on every App render (e.g. theme toggle), which changed PrivateRoute's
+// `allowedRoles` prop identity and re-fired its verify-token effect needlessly.
+const ALLOWED_ROLES = ['Teller', 'CSR', 'Admin', 'Authorizer', 'Auditor', 'Branch_Management', 'Maker']
 
 const App = () => {
   const { isColorModeSet, setColorMode } = useColorModes('coreui-free-react-admin-template-theme')
@@ -44,7 +48,7 @@ const App = () => {
           <Route exact path="/" name="Login Page" element={<Login />} />
         
           <Route path="*" name="Home" element={
-            <PrivateRoute allowedRoles={['Teller','CSR','Admin', 'Authorizer', 'Auditor', 'Branch_Management', 'Maker']} >
+            <PrivateRoute allowedRoles={ALLOWED_ROLES} >
             <DefaultLayout />
             </PrivateRoute>
           }
