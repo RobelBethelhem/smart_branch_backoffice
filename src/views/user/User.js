@@ -359,6 +359,13 @@ const Example = () => {
       fetchURL.searchParams.set('sorting', JSON.stringify(sorting ?? []));
 
       const response = await fetch(fetchURL.href, {
+        // Bypass the browser HTTP cache. This endpoint is authenticated and
+        // per-user, but the browser caches it by URL only (ignoring the
+        // x-access-token header). Express' default ETag then makes the browser
+        // revalidate and receive a 304, re-serving a stale/empty cached body
+        // for this URL — which showed up as "no users". no-store forces a
+        // fresh 200 with the real data every time.
+        cache: 'no-store',
         headers: {
           'x-access-token': accessToken,
         },
