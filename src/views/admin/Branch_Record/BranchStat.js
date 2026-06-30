@@ -23,6 +23,8 @@ import {
 } from '@mui/icons-material';
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
+import { useQuery } from '@tanstack/react-query';
+import { API_BASE_URL } from 'src/config/api';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, ChartTooltip, ChartLegend);
 
@@ -55,114 +57,37 @@ const MiniCard = ({ title, value, icon, color, delay = 0 }) => (
   </Grid>
 );
 
-const BranchStat = ({ transactions = [], branchCode = '', isLoading = false }) => {
+const EMPTY_BRANCH_STATS = {
+  totalTransactions: 0, totalAmount: 0, maxAmount: 0, minAmount: 0, avgAmount: 0,
+  incomingAmount: 0, outgoingAmount: 0, typeCounts: {}, statusCounts: {},
+  hourSlots: {}, dayCounts: {}, waitStats: { min: 0, max: 0, avg: 0 },
+};
+
+const BranchStat = ({ accessToken }) => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
-  // Filter transactions client-side (no separate API call!)
-  const filteredTransactions = useMemo(() => {
-    if (!startDate && !endDate) return transactions;
-    return transactions.filter(tx => {
-      const txDate = new Date(tx.request_date);
-      if (startDate && txDate < new Date(startDate)) return false;
-      if (endDate && txDate > new Date(endDate + 'T23:59:59')) return false;
-      return true;
-    });
-  }, [transactions, startDate, endDate]);
+  // Stats computed on the SERVER over the full (date-filtered) set and returned
+  // as a small aggregates object (faithful port of the previous client logic),
+  // so the browser no longer downloads the entire transactions array.
+  const { data: stats = EMPTY_BRANCH_STATS, isLoading } = useQuery({
+    queryKey: ['branch-stats-branchstat', startDate, endDate],
+    queryFn: async () => {
+      const url = new URL(`${API_BASE_URL}/api/zsmart_branch_requests/branch_transactions_stats`, window.location.origin);
+      if (startDate) url.searchParams.set('from', startDate);
+      if (endDate) url.searchParams.set('to', endDate);
+      const res = await fetch(url.href, {
+        headers: { 'Content-Type': 'application/json', 'x-access-token': accessToken },
+      });
+      const json = await res.json();
+      if (!res.ok || json.error) throw new Error(json.message || 'Failed to load statistics');
+      return json.data;
+    },
+    enabled: !!accessToken,
+  });
 
-  // Compute all statistics in one pass
-  const stats = useMemo(() => {
-    const result = {
-      waitingTimes: [],
-      totalAmount: 0,
-      maxAmount: 0,
-      minAmount: Infinity,
-      incomingAmount: 0,
-      outgoingAmount: 0,
-      typeCounts: {},
-      statusCounts: {},
-      hourSlots: {},
-      dayCounts: {},
-    };
-
-    if (filteredTransactions.length === 0) return result;
-
-    filteredTransactions.forEach(tx => {
-      const amount = parseFloat(tx.amount_in_figures) || 0;
-      // FIX: Use transactionType (not transaction_type)
-      const type = tx.transactionType?.toLowerCase() || 'unknown';
-      const status = tx.status || 'unknown';
-      const beneficiaryBranch = tx.beneficiary_branch || '';
-
-      // Waiting time (request_date → assigned_date)
-      if (tx.request_date && tx.assigned_date) {
-        const diffMs = new Date(tx.assigned_date) - new Date(tx.request_date);
-        const diffMin = Math.round(diffMs / 60000);
-        if (!isNaN(diffMin) && diffMin >= 0) {
-          result.waitingTimes.push(diffMin);
-        }
-      }
-
-      // Amount stats
-      result.totalAmount += amount;
-      if (amount > result.maxAmount) result.maxAmount = amount;
-      if (amount < result.minAmount) result.minAmount = amount;
-
-      // Incoming/Outgoing (FIX: use transactionType not transaction_type)
-      if (type === 'deposit') {
-        result.incomingAmount += amount;
-      } else if (type === 'withdraw' || type === 'other-bank-transfer') {
-        result.outgoingAmount += amount;
-      } else if (type === 'transfer') {
-        if (beneficiaryBranch === branchCode) {
-          result.incomingAmount += amount;
-        } else {
-          result.outgoingAmount += amount;
-        }
-      }
-
-      // Type counts
-      result.typeCounts[type] = (result.typeCounts[type] || 0) + 1;
-
-      // Status counts
-      result.statusCounts[status] = (result.statusCounts[status] || 0) + 1;
-
-      // Hour slots (2-hour windows)
-      if (tx.request_date) {
-        const hour = new Date(tx.request_date).getHours();
-        const slotStart = Math.floor(hour / 2) * 2;
-        const slotEnd = slotStart + 2;
-        const label = `${slotStart.toString().padStart(2, '0')}:00 - ${slotEnd.toString().padStart(2, '0')}:00`;
-        result.hourSlots[label] = (result.hourSlots[label] || 0) + 1;
-      }
-
-      // Day counts
-      if (tx.request_date) {
-        try {
-          const day = format(new Date(tx.request_date), 'EEEE');
-          result.dayCounts[day] = (result.dayCounts[day] || 0) + 1;
-        } catch { /* skip invalid dates */ }
-      }
-    });
-
-    // Handle edge cases
-    if (result.minAmount === Infinity) result.minAmount = 0;
-
-    return result;
-  }, [filteredTransactions, branchCode]);
-
-  // Derived waiting time stats (safe against empty arrays)
-  const waitStats = useMemo(() => {
-    const times = stats.waitingTimes;
-    if (times.length === 0) return { min: 0, max: 0, avg: 0 };
-    return {
-      min: Math.min(...times),
-      max: Math.max(...times),
-      avg: (times.reduce((a, b) => a + b, 0) / times.length).toFixed(1),
-    };
-  }, [stats.waitingTimes]);
-
-  const avgAmount = filteredTransactions.length > 0 ? stats.totalAmount / filteredTransactions.length : 0;
+  const waitStats = stats.waitStats || { min: 0, max: 0, avg: 0 };
+  const avgAmount = stats.avgAmount || 0;
 
   // Sort hour slots for proper chart display
   const sortedHourSlots = useMemo(() => {
@@ -267,7 +192,7 @@ const BranchStat = ({ transactions = [], branchCode = '', isLoading = false }) =
           <Button variant="outlined" size="small" onClick={() => { setStartDate(''); setEndDate(''); }}>Clear</Button>
         )}
         <Typography variant="body2" sx={{ ml: 'auto', color: 'text.secondary' }}>
-          {filteredTransactions.length} transactions
+          {stats.totalTransactions} transactions
         </Typography>
       </Paper>
 
@@ -276,7 +201,7 @@ const BranchStat = ({ transactions = [], branchCode = '', isLoading = false }) =
         <MiniCard title="Min Wait" value={`${waitStats.min} min`} icon={<ScheduleIcon />} color="#2ecc71" delay={0} />
         <MiniCard title="Avg Wait" value={`${waitStats.avg} min`} icon={<AccessTimeIcon />} color="#3498db" delay={0.05} />
         <MiniCard title="Max Wait" value={`${waitStats.max} min`} icon={<ScheduleIcon />} color="#e74c3c" delay={0.1} />
-        <MiniCard title="Transactions" value={filteredTransactions.length} icon={<ReceiptIcon />} color="#9b59b6" delay={0.15} />
+        <MiniCard title="Transactions" value={stats.totalTransactions} icon={<ReceiptIcon />} color="#9b59b6" delay={0.15} />
         <MiniCard title="Total Amount" value={formatCurrency(stats.totalAmount)} icon={<AttachMoneyIcon />} color="#f39c12" delay={0.2} />
         <MiniCard title="Avg Amount" value={formatCurrency(avgAmount)} icon={<AttachMoneyIcon />} color="#1abc9c" delay={0.25} />
         <MiniCard title="Max Amount" value={formatCurrency(stats.maxAmount)} icon={<TrendingUpIcon />} color="#e67e22" delay={0.3} />
@@ -352,7 +277,7 @@ const BranchStat = ({ transactions = [], branchCode = '', isLoading = false }) =
                       {count}
                     </td>
                     <td style={{ padding: '10px 16px', textAlign: 'right', borderBottom: '1px solid #eee', color: '#7f8c8d' }}>
-                      {filteredTransactions.length > 0 ? ((count / filteredTransactions.length) * 100).toFixed(1) : 0}%
+                      {stats.totalTransactions > 0 ? ((count / stats.totalTransactions) * 100).toFixed(1) : 0}%
                     </td>
                   </tr>
                 ))}

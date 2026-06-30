@@ -138,23 +138,31 @@ const BranchRecord = () => {
   const [isReceiptOpen, setIsReceiptOpen] = useState(false);
   const [receiptTransactions, setReceiptTransactions] = useState([]);
   const accessToken = useSelector((state) => state.user.accessToken);
+  const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 25 });
 
-  // Single data fetch shared across all tabs
-  const { data: fetchData = [], isError, isLoading, refetch } = useQuery({
-    queryKey: ['transactions'],
+  // Server-side paginated table fetch — one page at a time (+ the true total).
+  // The charts no longer use this query; each chart tab fetches its own
+  // server-computed aggregates, so the heavy full array (with images) is never
+  // shipped to the browser for the dashboard.
+  const { data: fetchData = {}, isError, isLoading, refetch } = useQuery({
+    queryKey: ['transactions', pagination],
     queryFn: async () => {
-      const response = await fetch(`${API_BASE_URL}/api/zsmart_branch_requests/branch_transactions`, {
+      const url = new URL(`${API_BASE_URL}/api/zsmart_branch_requests/branch_transactions`, window.location.origin);
+      url.searchParams.set('start', `${pagination.pageIndex * pagination.pageSize}`);
+      url.searchParams.set('size', `${pagination.pageSize}`);
+      const response = await fetch(url.href, {
         headers: { 'Content-Type': 'application/json', 'x-access-token': accessToken },
       });
       const json = await response.json();
       if (json.error) throw new Error(json.message || 'Failed to fetch transactions');
-      return json.data;
+      return json;
     },
     enabled: !!accessToken,
   });
 
-  const transactions = useMemo(() => fetchData?.transactions || [], [fetchData]);
-  const branchCode = fetchData?.branch || '';
+  const transactions = useMemo(() => fetchData?.data?.transactions || [], [fetchData]);
+  const branchCode = fetchData?.data?.branch || '';
+  const totalRowCount = fetchData?.meta?.totalRowCount ?? 0;
 
   const handleOpenDetail = useCallback((data) => {
     setEntranceDirection(Math.random() > 0.5 ? 1 : 2);
@@ -167,10 +175,10 @@ const BranchRecord = () => {
   const handlePostSelectedTransactions = async () => {
     handleConfirmationClose();
 
-    const selectedTransactions = Object.keys(rowSelection).map(id => {
-      const row = transactions.find(t => t._id === id);
-      return { id: row._id, transactionType: row.transactionType };
-    });
+    const selectedTransactions = Object.keys(rowSelection)
+      .map(id => transactions.find(t => t._id === id))
+      .filter(Boolean) // guard: only rows present on the current page (server paging)
+      .map(row => ({ id: row._id, transactionType: row.transactionType }));
 
     try {
       const response = await fetch(`${API_BASE_URL}/api/zsmart_branch_requests/transaction_audited`, {
@@ -195,7 +203,19 @@ const BranchRecord = () => {
     // Load the heavy xlsx library on-demand (only when the user actually
     // exports) instead of pulling its ~900KB into the route chunk for everyone.
     const { utils, writeFile } = await import('xlsx');
-    const exportData = transactions.map(row => ({
+    // Export ALL rows, not just the current page: fetch the full set on demand
+    // (the legacy no-pagination path). Falls back to the current page on error.
+    let rows = transactions;
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/zsmart_branch_requests/branch_transactions`, {
+        headers: { 'Content-Type': 'application/json', 'x-access-token': accessToken },
+      });
+      const json = await response.json();
+      if (!json.error && json?.data?.transactions) rows = json.data.transactions;
+    } catch (e) {
+      /* fall back to the current page */
+    }
+    const exportData = rows.map(row => ({
       'Transaction Type': row.transactionType,
       'Account Number': row.account_number,
       'Account Holder': row.acc_holder_name,
@@ -220,7 +240,7 @@ const BranchRecord = () => {
       link.download = `Transactions_${format(new Date(), 'yyyy-MM-dd')}.csv`;
       link.click();
     }
-  }, [transactions]);
+  }, [transactions, accessToken]);
 
   const handlePreviewClick = useCallback(() => {
     const selectedIds = Object.keys(rowSelection);
@@ -545,15 +565,14 @@ const BranchRecord = () => {
               enableRowSelection
               getRowId={(row) => row._id}
               onRowSelectionChange={setRowSelection}
-              state={{ rowSelection, isLoading }}
+              // --- Server-side pagination: the backend returns one page + total ---
+              manualPagination
+              rowCount={totalRowCount}
+              onPaginationChange={setPagination}
+              state={{ rowSelection, isLoading, pagination }}
               enableGrouping
-              // --- Performance: keep the grid fast even with large datasets ---
-              enablePagination
               enableStickyHeader
-              initialState={{
-                density: 'compact',
-                pagination: { pageIndex: 0, pageSize: 25 },
-              }}
+              initialState={{ density: 'compact' }}
               muiPaginationProps={{ rowsPerPageOptions: [25, 50, 100, 250] }}
               muiTableContainerProps={{ sx: { maxHeight: '65vh' } }}
               muiTableBodyRowProps={({ row }) => ({
@@ -589,12 +608,12 @@ const BranchRecord = () => {
         )}
         {activeTab === 1 && (
           <motion.div key="stats" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <StatisticsTab transactions={transactions} branchCode={branchCode} isLoading={isLoading} />
+            <StatisticsTab accessToken={accessToken} />
           </motion.div>
         )}
         {activeTab === 2 && (
           <motion.div key="branchStat" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <BranchStat transactions={transactions} branchCode={branchCode} isLoading={isLoading} />
+            <BranchStat accessToken={accessToken} />
           </motion.div>
         )}
       </AnimatePresence>

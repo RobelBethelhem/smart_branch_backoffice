@@ -19,6 +19,8 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
 import { motion } from 'framer-motion';
+import { useQuery } from '@tanstack/react-query';
+import { API_BASE_URL } from 'src/config/api';
 
 const COLORS = ['#3498db', '#2ecc71', '#e74c3c', '#f39c12', '#9b59b6', '#1abc9c', '#e67e22'];
 
@@ -62,120 +64,60 @@ const ChartCard = ({ title, children, height = 320 }) => (
   </Paper>
 );
 
-const StatisticsTab = ({ transactions = [], branchCode = '', isLoading = false }) => {
+const EMPTY_STATS = {
+  incomingMoney: 0, outgoingMoney: 0, netFlow: 0, totalTransactions: 0,
+  transactionTypes: {}, statusDistribution: {}, postedByDistribution: {},
+  userStats: {}, delayMetrics: {},
+};
+
+const StatisticsTab = ({ accessToken }) => {
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
 
-  // Filter transactions by date range (client-side — no extra API call!)
-  const filteredTransactions = useMemo(() => {
-    if (!dateRange.start && !dateRange.end) return transactions;
-    return transactions.filter(tx => {
-      const txDate = new Date(tx.request_date);
-      if (dateRange.start && txDate < new Date(dateRange.start)) return false;
-      if (dateRange.end && txDate > new Date(dateRange.end + 'T23:59:59')) return false;
-      return true;
-    });
-  }, [transactions, dateRange]);
+  // Stats are now computed on the SERVER over the full (date-filtered) set and
+  // returned as a small aggregates object — the browser no longer downloads the
+  // entire transactions array. The math is a faithful port of what used to run
+  // here, so the charts render identically.
+  const { data: stats = EMPTY_STATS, isLoading } = useQuery({
+    queryKey: ['branch-stats-statistics', dateRange],
+    queryFn: async () => {
+      const url = new URL(`${API_BASE_URL}/api/zsmart_branch_requests/branch_transactions_stats`, window.location.origin);
+      if (dateRange.start) url.searchParams.set('from', dateRange.start);
+      if (dateRange.end) url.searchParams.set('to', dateRange.end);
+      const res = await fetch(url.href, {
+        headers: { 'Content-Type': 'application/json', 'x-access-token': accessToken },
+      });
+      const json = await res.json();
+      if (!res.ok || json.error) throw new Error(json.message || 'Failed to load statistics');
+      return json.data;
+    },
+    enabled: !!accessToken,
+  });
 
-  // Compute all stats in a single pass (O(n) instead of multiple loops)
-  const stats = useMemo(() => {
-    let incomingMoney = 0;
-    let outgoingMoney = 0;
-    const transactionTypes = {};
-    const statusDistribution = {};
-    const postedByDistribution = {};
-    const userStats = {};
-    const delayMetrics = {};
-
-    filteredTransactions.forEach(tx => {
-      const amount = parseFloat(tx.amount_in_figures) || 0;
-      const type = tx.transactionType?.toLowerCase();
-      const status = tx.status || 'unknown';
-      const postedBy = tx.posted_by || 'Unassigned';
-      const beneficiaryBranch = tx.beneficiary_branch || '';
-
-      // Type & status counts (include ALL transactions, not just posted ones)
-      transactionTypes[type] = (transactionTypes[type] || 0) + 1;
-      statusDistribution[status] = (statusDistribution[status] || 0) + 1;
-      postedByDistribution[postedBy] = (postedByDistribution[postedBy] || 0) + 1;
-
-      // Incoming/Outgoing money
-      if (type === 'deposit') {
-        incomingMoney += amount;
-      } else if (type === 'withdraw' || type === 'other-bank-transfer') {
-        outgoingMoney += amount;
-      } else if (type === 'transfer') {
-        if (beneficiaryBranch === branchCode) {
-          incomingMoney += amount;
-        } else {
-          outgoingMoney += amount;
-        }
-      }
-
-      // Per-user stats
-      if (!userStats[postedBy]) {
-        userStats[postedBy] = { incomingMoney: 0, outgoingMoney: 0, count: 0 };
-      }
-      userStats[postedBy].count += 1;
-
-      if (type === 'deposit' || (type === 'transfer' && beneficiaryBranch === branchCode)) {
-        userStats[postedBy].incomingMoney += amount;
-      } else if (type === 'withdraw' || type === 'other-bank-transfer' || (type === 'transfer' && beneficiaryBranch !== branchCode)) {
-        userStats[postedBy].outgoingMoney += amount;
-      }
-
-      // Delay metrics (only for transactions that have both dates)
-      if (tx.assigned_date && tx.posted_date) {
-        const delayMs = new Date(tx.posted_date) - new Date(tx.assigned_date);
-        const delayMin = delayMs / 60000;
-        if (!isNaN(delayMin) && delayMin >= 0) {
-          if (!delayMetrics[postedBy]) {
-            delayMetrics[postedBy] = { max: delayMin, min: delayMin, total: delayMin, count: 1 };
-          } else {
-            delayMetrics[postedBy].max = Math.max(delayMetrics[postedBy].max, delayMin);
-            delayMetrics[postedBy].min = Math.min(delayMetrics[postedBy].min, delayMin);
-            delayMetrics[postedBy].total += delayMin;
-            delayMetrics[postedBy].count += 1;
-          }
-        }
-      }
-    });
-
-    // Calculate averages
-    Object.values(delayMetrics).forEach(m => { m.avg = m.total / m.count; });
-
-    return {
-      incomingMoney, outgoingMoney, transactionTypes, statusDistribution,
-      postedByDistribution, userStats, delayMetrics,
-      totalTransactions: filteredTransactions.length,
-      netFlow: incomingMoney - outgoingMoney,
-    };
-  }, [filteredTransactions, branchCode]);
-
-  // Chart data
+  // Chart data (same shapes as before, derived from the server stats object)
   const pieChartData = useMemo(() =>
-    Object.entries(stats.transactionTypes).map(([key, value]) => ({
+    Object.entries(stats.transactionTypes || {}).map(([key, value]) => ({
       name: key.charAt(0).toUpperCase() + key.slice(1).replace(/-/g, ' '), value,
     })), [stats.transactionTypes]);
 
   const statusChartData = useMemo(() =>
-    Object.entries(stats.statusDistribution).map(([status, count]) => ({
+    Object.entries(stats.statusDistribution || {}).map(([status, count]) => ({
       status: status.charAt(0).toUpperCase() + status.slice(1).replace(/_/g, ' '), count,
     })), [stats.statusDistribution]);
 
   const postedByChartData = useMemo(() =>
-    Object.entries(stats.postedByDistribution)
+    Object.entries(stats.postedByDistribution || {})
       .filter(([user]) => user !== 'Unassigned')
       .map(([user, count]) => ({ name: user, value: count })),
     [stats.postedByDistribution]);
 
   const usersInOutData = useMemo(() =>
-    Object.entries(stats.userStats)
+    Object.entries(stats.userStats || {})
       .filter(([user]) => user !== 'Unassigned')
       .map(([user, data]) => ({ user, incoming: data.incomingMoney, outgoing: data.outgoingMoney })),
     [stats.userStats]);
 
   const delayChartData = useMemo(() =>
-    Object.entries(stats.delayMetrics).map(([user, m]) => ({
+    Object.entries(stats.delayMetrics || {}).map(([user, m]) => ({
       user, avg: +m.avg.toFixed(1), max: +m.max.toFixed(1), min: +m.min.toFixed(1),
     })), [stats.delayMetrics]);
 
@@ -212,7 +154,7 @@ const StatisticsTab = ({ transactions = [], branchCode = '', isLoading = false }
           <Button variant="outlined" size="small" onClick={() => setDateRange({ start: '', end: '' })}>Clear</Button>
         )}
         <Typography variant="body2" sx={{ ml: 'auto', color: 'text.secondary' }}>
-          Showing {filteredTransactions.length} of {transactions.length} transactions
+          {stats.totalTransactions} transactions
         </Typography>
       </Paper>
 
