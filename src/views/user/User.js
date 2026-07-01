@@ -611,14 +611,22 @@ const Example = () => {
     }
   };
 
-  const handleSaveUser = async ({ values, table }) => {
-    // Ensure roles is always an array for the backend
-    const rolesArray = Array.isArray(values.roles) ? values.roles : (values.roles ? [values.roles] : []);
+  const handleSaveUser = async ({ values, table, row }) => {
+    // The Role and Till ID cells are custom Autocompletes that write their edit
+    // into `tableData` (via meta.updateData), NOT into MRT's `values` cache — so
+    // read those from the live tableData row, otherwise a role change (e.g.
+    // Authorizer -> Auditor) is dropped on save. The name is a normal edit field
+    // so it comes from `values`. Always include the row id so the backend can
+    // locate the user.
+    const current = tableData.find((r) => r.id === row.id) || {};
+    const rolesSource = current.roles ?? values.roles;
+    const rolesArray = Array.isArray(rolesSource) ? rolesSource : (rolesSource ? [rolesSource] : []);
+    const userName = values.user ?? current.user;
     const updatedValues = {
-      ...values,
-      user: values.user,
-      email: `${values.user}@zemenbank.com`,
-      till_id: values.till_id,
+      id: row.id,
+      user: userName,
+      email: `${userName}@zemenbank.com`,
+      till_id: current.till_id ?? values.till_id ?? null,
       roles: rolesArray,
     };
 
