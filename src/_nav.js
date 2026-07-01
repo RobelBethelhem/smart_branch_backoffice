@@ -20,7 +20,9 @@ import { CNavGroup, CNavItem, CNavTitle } from '@coreui/react'
 
 
 const _nav = (userRole) => [
-  {
+  // Dashboard is the transaction-oriented landing. Branch_Management and
+  // Super_Admin don't do transactions, so they don't see it.
+  ...((userRole === 'Super_Admin' || userRole === 'Branch_Management') ? [] : [{
     component: CNavItem,
     name: 'Dashboard',
     to: '/dashboard',
@@ -29,7 +31,7 @@ const _nav = (userRole) => [
       color: 'info',
       text: 'NEW',
     },
-  },
+  }]),
 
   ...(userRole === 'user' ? [
     {
@@ -259,10 +261,10 @@ const _nav = (userRole) => [
 
       {
         component: CNavItem,
-        name: 'Employee',
+        name: 'User Management',
         to: '/super_admin/employee'
       },
-  
+
     ] : []),
 
 

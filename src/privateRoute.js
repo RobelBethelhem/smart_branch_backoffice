@@ -26,7 +26,7 @@ const PrivateRoute = ({ allowedRoles, children }) => {
 
         if (response.ok) {
           const decodedToken = jwtDecode(accessToken);
-          const userRole = decodedToken.roles[0];
+          const userRole = decodedToken.roles?.[0];
           setIsTokenValid(allowedRoles.includes(userRole));
         } else {
           setIsTokenValid(false);

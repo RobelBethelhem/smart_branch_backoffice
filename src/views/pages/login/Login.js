@@ -23,6 +23,15 @@ import { logo } from '../../../assets/brand/logo';
 import { useDispatch, useSelector } from 'react-redux';
 import './Login.css';
 
+// Where each role lands after login. Branch_Management and Super_Admin are not
+// transaction roles, so they skip the (transaction-oriented) dashboard and go
+// straight to the screen they actually use.
+const landingFor = (role) => {
+  if (role === 'Super_Admin') return '/super_admin/employee';
+  if (role === 'Branch_Management') return '/branch_management/branches_record';
+  return '/dashboard';
+};
+
 const Login = () => {
   const dispatch = useDispatch();
   const user = useSelector(state => state.user);
@@ -47,7 +56,7 @@ const Login = () => {
 
           if (response.ok) {
             const decodedToken = jwtDecode(accessToken);
-            setRedirectPath('/dashboard');
+            setRedirectPath(landingFor(decodedToken.roles?.[0]));
           } else {
             toast.error('Invalid or Expiry Token');
             dispatch({ type: 'clearUser' });
@@ -82,7 +91,7 @@ const Login = () => {
       const data = await response.json();
       if (response.ok) {
         const decodedAccessToken = jwtDecode(data.accessToken);
-        const userRole = decodedAccessToken.roles[0];
+        const userRole = decodedAccessToken.roles?.[0];
         dispatch({
           type: 'setUser',
           role: userRole,
@@ -93,7 +102,7 @@ const Login = () => {
         });
 
         dispatch({ type: 'Voted' });
-        setRedirectPath('/dashboard');
+        setRedirectPath(landingFor(userRole));
       } else {
         toast.error(`Login failed. ${data.message}`);
       }

@@ -200,8 +200,12 @@ const Example = () => {
   const [sorting, setSorting] = useState([]);
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 10 });
   const userRole = useSelector((state) => state.user.role);
-  // Branch_Management can only create Admin users (via the clean /create_admin path).
+  // Branch_Management manages (creates) Admins; Super_Admin manages
+  // Branch_Management users. Both get the same locked-down grid experience.
   const isBranchManagement = userRole === 'Branch_Management';
+  const isSuperAdmin = userRole === 'Super_Admin';
+  const isManagedCreator = isBranchManagement || isSuperAdmin;
+  const managedRole = isBranchManagement ? 'Admin' : (isSuperAdmin ? 'Branch_Management' : null);
   const [openDeleteModal, setOpenDeleteModal] = useState(false);
   const [selectedRow, setSelectedRow] = useState(null);
   const [isExcelImportOpen, setIsExcelImportOpen] = useState(false);
@@ -377,8 +381,8 @@ const Example = () => {
         accessorKey: 'roles',
         header: 'Roles',
         editVariant: 'select',
-        // Branch_Management may only create Admins; everyone else keeps the full list.
-        editSelectOptions: isBranchManagement ? ['Admin'] : roles,
+        // Managed creators are locked to a single target role; others keep the full list.
+        editSelectOptions: isManagedCreator ? [managedRole] : roles,
         muiEditTextFieldProps: {
           select: true,
           error: !!validationErrors?.roles,
@@ -403,16 +407,16 @@ const Example = () => {
       },
 
       ];
-      if (isBranchManagement) {
-        // Branch_Management manages Admins by name / branch / role only — the RMS
-        // employee fields are noise for them, so hide those columns (this also
-        // trims the create & edit dialogs down to just the relevant fields).
+      if (isManagedCreator) {
+        // Branch_Management / Super_Admin manage users by name / branch / role
+        // only — the RMS employee fields are noise, so hide those columns (this
+        // also trims the create & edit dialogs to just the relevant fields).
         const hidden = new Set(['first_name', 'last_name', 'employee_id', 'position', 'department']);
         return cols.filter((c) => !hidden.has(c.accessorKey));
       }
       return cols;
     },
-    [validationErrors, isBranchManagement],
+    [validationErrors, isBranchManagement, isSuperAdmin, isManagedCreator, managedRole],
   );
 
   const { mutateAsync: createUser, isPending: isCreatingUser } = useCreateUser(refetch);
@@ -421,19 +425,20 @@ const Example = () => {
   const { mutateAsync: setUserActive } = useSetUserActive(refetch);
 
   const handleCreateUser = async ({ values, table }) => {
-    if (isBranchManagement) {
-      // Branch_Management creates Admins only: only user (name) + branch are
-      // needed; email is derived and the role is forced to Admin server-side.
+    if (isManagedCreator) {
+      // Branch_Management creates Admins; Super_Admin creates Branch_Management.
+      // Name is required; branch is required only for Admins (they are branch-
+      // scoped). Email is derived and the role is forced server-side.
       const errs = {};
       if (!values.user) errs.user = 'Name is Required';
-      if (!values.branch) errs.branch = 'Branch is Required';
+      if (isBranchManagement && !values.branch) errs.branch = 'Branch is Required';
       if (Object.keys(errs).length) { setValidationErrors(errs); return; }
       setValidationErrors({});
       await createUser({
         user: values.user,
         email: values.email || `${values.user}@zemenbank.com`,
-        branch: values.branch,
-        roles: ['Admin'],
+        branch: values.branch || 'HQ',
+        roles: [managedRole],
       });
       table.setCreatingRow(null);
       return;
@@ -449,20 +454,21 @@ const Example = () => {
   };
 
   const handleSaveUser = async ({ values, table, row }) => {
-    if (isBranchManagement) {
-      // Branch_Management edits an Admin: validate name + branch only, keep the
-      // role locked to Admin, and always send the row id so the update lands.
+    if (isManagedCreator) {
+      // Branch_Management edits Admins; Super_Admin edits Branch_Management.
+      // Validate name (+ branch for Admins), keep the role locked, and always
+      // send the row id so the update lands.
       const errs = {};
       if (!values.user) errs.user = 'Name is Required';
-      if (!values.branch) errs.branch = 'Branch is Required';
+      if (isBranchManagement && !values.branch) errs.branch = 'Branch is Required';
       if (Object.keys(errs).length) { setValidationErrors(errs); return; }
       setValidationErrors({});
       await updateUser({
         id: row.original.id,
         user: values.user,
         email: values.email || `${values.user}@zemenbank.com`,
-        branch: values.branch,
-        roles: ['Admin'],
+        branch: values.branch || 'HQ',
+        roles: [managedRole],
       });
       table.setEditingRow(null);
       return;
@@ -557,8 +563,8 @@ const Example = () => {
             <EditIcon />
           </IconButton>
         </Tooltip>
-        {isBranchManagement ? (
-          // Branch_Management can't hard-delete — it deactivates (blocks login)
+        {isManagedCreator ? (
+          // Managed creators can't hard-delete — they deactivate (blocks login)
           // and can reactivate the same way.
           <Tooltip title={active ? 'Deactivate (block login)' : 'Activate'}>
             <IconButton
@@ -665,11 +671,17 @@ function useCreateUser(refetch) {
   const role = useSelector((state) => state.user.role);
   return useMutation({
     mutationFn: async (user) => {
-      // Branch_Management uses the clean /create_admin path (no RMS site_id) and
-      // may only create Admins; everyone else uses the existing /signUp.
+      // Branch_Management -> /create_admin (forces Admin role); Super_Admin ->
+      // /create_branch_management (forces Branch_Management role). Both skip the
+      // RMS site_id coupling of /signUp. Everyone else uses /signUp.
       const isBM = role === 'Branch_Management';
-      const url = isBM ? `${API_BASE_URL}/api/create_admin` : `${API_BASE_URL}/api/signUp/`;
-      const payload = isBM
+      const isSA = role === 'Super_Admin';
+      const url = isBM
+        ? `${API_BASE_URL}/api/create_admin`
+        : isSA
+          ? `${API_BASE_URL}/api/create_branch_management`
+          : `${API_BASE_URL}/api/signUp/`;
+      const payload = (isBM || isSA)
         ? { user: user.user, email: user.email, branch: user.branch }
         : user;
 
