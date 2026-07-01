@@ -182,10 +182,11 @@ const Example = () => {
   const tableInstance = useMaterialReactTable({
     columns,
     data: fetchData,
-    enableRowSelection: (row) => row.original.status === 'authorized',
+    // Auditor can act on posted OR authorized transactions (the audit step accepts both).
+    enableRowSelection: (row) => ['posted', 'authorized'].includes(row.original.status),
     muiTableBodyRowProps: ({ row }) => ({
       onClick: () => {
-        if (row.original.status === 'authorized') {
+        if (['posted', 'authorized'].includes(row.original.status)) {
           setRowSelection((prev) => ({
             ...prev,
             [row.index]: !prev[row.index],
@@ -194,7 +195,7 @@ const Example = () => {
       },
       selected: rowSelection[row.index],
       style: {
-        cursor: row.original.status === 'authorized' ? 'pointer' : 'not-allowed',
+        cursor: ['posted', 'authorized'].includes(row.original.status) ? 'pointer' : 'not-allowed',
         backgroundColor: rowSelection[row.index] ? '#e0f7fa' : 'inherit',
       },
     }),
