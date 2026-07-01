@@ -10,6 +10,7 @@ import { useSelector } from 'react-redux';
 import {
   Box,
   Button,
+  Chip,
   Dialog,
   DialogActions,
   DialogContent,
@@ -28,6 +29,8 @@ import {
 } from '@tanstack/react-query';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
+import BlockIcon from '@mui/icons-material/Block';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import axios from 'axios';
 import { useDropzone } from 'react-dropzone';
 
@@ -255,8 +258,9 @@ const Example = () => {
  
 
   const columns = useMemo(
-    () => [
-     
+    () => {
+      const cols = [
+
       {
         accessorKey: 'first_name',
         header: 'First Name',
@@ -381,14 +385,40 @@ const Example = () => {
           helperText: validationErrors?.roles,
         },
       },
+      {
+        accessorKey: 'active',
+        header: 'Status',
+        enableEditing: false,      // not an input in the create/edit dialog
+        enableColumnFilter: false,
+        Cell: ({ row }) => {
+          const active = row.original.active !== false;
+          return (
+            <Chip
+              size="small"
+              color={active ? 'success' : 'default'}
+              label={active ? 'Active' : 'Inactive'}
+            />
+          );
+        },
+      },
 
-    ],
+      ];
+      if (isBranchManagement) {
+        // Branch_Management manages Admins by name / branch / role only — the RMS
+        // employee fields are noise for them, so hide those columns (this also
+        // trims the create & edit dialogs down to just the relevant fields).
+        const hidden = new Set(['first_name', 'last_name', 'employee_id', 'position', 'department']);
+        return cols.filter((c) => !hidden.has(c.accessorKey));
+      }
+      return cols;
+    },
     [validationErrors, isBranchManagement],
   );
 
   const { mutateAsync: createUser, isPending: isCreatingUser } = useCreateUser(refetch);
   const { mutateAsync: updateUser, isPending: isUpdatingUser } = useUpdateUser();
   const { mutateAsync: deleteUser, isPending: isDeletingUser } = useDeleteUser(refetch);
+  const { mutateAsync: setUserActive } = useSetUserActive(refetch);
 
   const handleCreateUser = async ({ values, table }) => {
     if (isBranchManagement) {
@@ -418,14 +448,33 @@ const Example = () => {
     table.setCreatingRow(null); //exit creating mode
   };
 
-  const handleSaveUser = async ({ values, table }) => {
+  const handleSaveUser = async ({ values, table, row }) => {
+    if (isBranchManagement) {
+      // Branch_Management edits an Admin: validate name + branch only, keep the
+      // role locked to Admin, and always send the row id so the update lands.
+      const errs = {};
+      if (!values.user) errs.user = 'Name is Required';
+      if (!values.branch) errs.branch = 'Branch is Required';
+      if (Object.keys(errs).length) { setValidationErrors(errs); return; }
+      setValidationErrors({});
+      await updateUser({
+        id: row.original.id,
+        user: values.user,
+        email: values.email || `${values.user}@zemenbank.com`,
+        branch: values.branch,
+        roles: ['Admin'],
+      });
+      table.setEditingRow(null);
+      return;
+    }
     const newValidationErrors = validateUser(values);
     if (Object.values(newValidationErrors).some((error) => error)) {
       setValidationErrors(newValidationErrors);
       return;
     }
     setValidationErrors({});
-    await updateUser(values);
+    // The id isn't an editable column, so pull it from the row or the update no-ops.
+    await updateUser({ ...values, id: row.original.id });
     table.setEditingRow(null); //exit editing mode
   };
 
@@ -499,23 +548,39 @@ const Example = () => {
         </DialogActions>
       </>
     ),
-    renderRowActions: ({ row, table }) => (
+    renderRowActions: ({ row, table }) => {
+      const active = row.original.active !== false;
+      return (
       <Box sx={{ display: 'flex', gap: '1rem' }}>
         <Tooltip title="Edit">
           <IconButton onClick={() => table.setEditingRow(row)}>
             <EditIcon />
           </IconButton>
         </Tooltip>
-        <Tooltip title="Delete">
-          <IconButton color="error" onClick={() => {
-            setOpenDeleteModal(true);
-            setSelectedRow(row);
-          }}>
-            <DeleteIcon />
-          </IconButton>
-        </Tooltip>
+        {isBranchManagement ? (
+          // Branch_Management can't hard-delete — it deactivates (blocks login)
+          // and can reactivate the same way.
+          <Tooltip title={active ? 'Deactivate (block login)' : 'Activate'}>
+            <IconButton
+              color={active ? 'warning' : 'success'}
+              onClick={() => setUserActive({ id: row.original.id, active: !active })}
+            >
+              {active ? <BlockIcon /> : <CheckCircleIcon />}
+            </IconButton>
+          </Tooltip>
+        ) : (
+          <Tooltip title="Delete">
+            <IconButton color="error" onClick={() => {
+              setOpenDeleteModal(true);
+              setSelectedRow(row);
+            }}>
+              <DeleteIcon />
+            </IconButton>
+          </Tooltip>
+        )}
       </Box>
-    ),
+      );
+    },
     renderTopToolbarCustomActions: ({ table }) => (
       <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '1rem' }}>
         <Tooltip arrow title="Refresh Data">
@@ -712,6 +777,32 @@ function useDeleteUser(refetch) {
   });
 }
 
+// Soft-delete toggle used by Branch_Management: deactivate blocks login,
+// activate restores it. No hard delete.
+function useSetUserActive(refetch) {
+  return useMutation({
+    mutationFn: async ({ id, active }) => {
+      const response = await fetch(`${API_BASE_URL}/api/set_user_active/`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "x-access-token": getAccessToken(),
+        },
+        body: JSON.stringify({ id, active }),
+      });
+      const data = await response.json();
+      if (response.ok) {
+        toast.success(active ? "User activated" : "User deactivated");
+      } else {
+        toast.error(`Error: ${data.message}`);
+      }
+    },
+    onSuccess: () => {
+      refetch();
+    },
+  });
+}
+
 const queryClient = new QueryClient();
 
 const ExampleWithProviders = () => (
@@ -722,17 +813,20 @@ const ExampleWithProviders = () => (
 
 export default ExampleWithProviders;
 
-const validateRequired = (value) => !!value.length;
+const validateRequired = (value) => !!String(value ?? '').length;
 const validateEmail = (email) =>
-  !!email.length &&
-  email.toLowerCase().match(
+  !!String(email ?? '').length &&
+  String(email).toLowerCase().match(
     /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/,
   );
 
 function validateUser(user) {
+  // The Name column's accessorKey is `user` (not `name`); guard undefined so an
+  // edit save never throws and leaves the dialog stuck open.
+  const rolesCount = Array.isArray(user.roles) ? user.roles.length : (user.roles ? 1 : 0);
   return {
-    name: !validateRequired(user.name) ? 'Name is Required' : '',
+    user: !validateRequired(user.user) ? 'Name is Required' : '',
     email: !validateEmail(user.email) ? 'Incorrect Email Format' : '',
-    roles: user.roles.length === 0 ? 'Roles are Required' : '',
+    roles: rolesCount === 0 ? 'Roles are Required' : '',
   };
 }
