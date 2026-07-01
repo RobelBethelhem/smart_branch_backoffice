@@ -70,19 +70,25 @@ const EMPTY_STATS = {
   userStats: {}, delayMetrics: {},
 };
 
-const StatisticsTab = ({ accessToken }) => {
-  const [dateRange, setDateRange] = useState({ start: '', end: '' });
+// Optional props (used by the Branch_Management "Branches Record" view):
+//   branch           - restrict stats to one branch code (?branch=)
+//   dateRange        - controlled { start, end } from the parent
+//   hideDateFilter   - hide this tab's own date picker (parent controls it)
+const StatisticsTab = ({ accessToken, branch, dateRange: controlledDateRange, hideDateFilter = false }) => {
+  const [internalDateRange, setInternalDateRange] = useState({ start: '', end: '' });
+  const dateRange = controlledDateRange || internalDateRange;
+  const setDateRange = setInternalDateRange;
 
-  // Stats are now computed on the SERVER over the full (date-filtered) set and
+  // Stats are computed on the SERVER over the (date/branch-filtered) set and
   // returned as a small aggregates object — the browser no longer downloads the
-  // entire transactions array. The math is a faithful port of what used to run
-  // here, so the charts render identically.
+  // entire transactions array. Faithful port, so the charts render identically.
   const { data: stats = EMPTY_STATS, isLoading } = useQuery({
-    queryKey: ['branch-stats-statistics', dateRange],
+    queryKey: ['branch-stats-statistics', dateRange, branch],
     queryFn: async () => {
       const url = new URL(`${API_BASE_URL}/api/zsmart_branch_requests/branch_transactions_stats`, window.location.origin);
       if (dateRange.start) url.searchParams.set('from', dateRange.start);
       if (dateRange.end) url.searchParams.set('to', dateRange.end);
+      if (branch) url.searchParams.set('branch', branch);
       const res = await fetch(url.href, {
         headers: { 'Content-Type': 'application/json', 'x-access-token': accessToken },
       });
@@ -90,7 +96,8 @@ const StatisticsTab = ({ accessToken }) => {
       if (!res.ok || json.error) throw new Error(json.message || 'Failed to load statistics');
       return json.data;
     },
-    enabled: !!accessToken,
+    // In branch-selection mode, wait until a branch is chosen.
+    enabled: !!accessToken && (hideDateFilter ? !!branch : true),
   });
 
   // Chart data (same shapes as before, derived from the server stats object)
@@ -137,7 +144,8 @@ const StatisticsTab = ({ accessToken }) => {
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }}>
-      {/* Date Filter */}
+      {/* Date Filter (hidden when the parent — e.g. Branches Record — controls it) */}
+      {!hideDateFilter && (
       <Paper sx={{ p: 2, mb: 3, borderRadius: 3, display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
         <Typography variant="subtitle1" sx={{ fontWeight: 600, mr: 1 }}>Date Range:</Typography>
         <TextField
@@ -157,6 +165,7 @@ const StatisticsTab = ({ accessToken }) => {
           {stats.totalTransactions} transactions
         </Typography>
       </Paper>
+      )}
 
       {/* Summary Cards */}
       <Grid container spacing={3} sx={{ mb: 3 }}>

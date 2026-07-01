@@ -187,8 +187,18 @@ const _nav = (userRole) => [
     },
     {
       component: CNavItem,
-      name: 'Branch Record',
-      to: '/admin/branch_record'
+      name: 'Branches Record',
+      to: '/branch_management/branches_record'
+    },
+    {
+      component: CNavItem,
+      name: 'Limit Management',
+      to: '/admin/limit_management'
+    },
+    {
+      component: CNavItem,
+      name: 'User Management',
+      to: '/super_admin/employee'
     },
 
   ] : []),
@@ -228,11 +238,6 @@ const _nav = (userRole) => [
           component: CNavItem,
           name: 'Biometric Approval',
           to: '/admin/biometric_approval'
-        },
-        {
-          component: CNavItem,
-          name: 'Limit Management',
-          to: '/admin/limit_management'
         },
         {
           component: CNavItem,

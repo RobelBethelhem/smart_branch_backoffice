@@ -36,6 +36,7 @@ const GoldDiggerMulGame = React.lazy(()=> import('./views/admin/GoldDiggerMulGam
 const Authorize = React.lazy(()=> import('./views/admin/Authorize/Authorize'));
 const Audit = React.lazy(()=> import('./views/admin/Audit/Audit'));
 const BranchRecord = React.lazy(()=> import('./views/admin/Branch_Record/BranchRecord'));
+const BranchesRecord = React.lazy(()=> import('./views/admin/Branch_Record/BranchesRecord'));
 
 const Reassignment = React.lazy(() => import('./views/admin/Reassignment/Reassignment'));
 
@@ -59,7 +60,7 @@ const routes = [
     path: '/super_admin/employee',
     name: 'Employee',
     element: System_User_Management,
-    roles: ['Super_Admin']
+    roles: ['Super_Admin', 'Branch_Management']
   },
 
   {
@@ -118,7 +119,13 @@ const routes = [
     path: '/admin/limit_management',
     name: 'Limit Management',
     element: LimitManagement,
-    roles: ['Admin']
+    roles: ['Branch_Management']
+  },
+  {
+    path: '/branch_management/branches_record',
+    name: 'Branches Record',
+    element: BranchesRecord,
+    roles: ['Branch_Management']
   },
   {
     path: '/authorizer/pending_checker_approval',

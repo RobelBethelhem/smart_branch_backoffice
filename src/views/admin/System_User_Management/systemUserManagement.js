@@ -196,6 +196,9 @@ const Example = () => {
   const [globalFilter, setGlobalFilter] = useState('');
   const [sorting, setSorting] = useState([]);
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 10 });
+  const userRole = useSelector((state) => state.user.role);
+  // Branch_Management can only create Admin users (via the clean /create_admin path).
+  const isBranchManagement = userRole === 'Branch_Management';
   const [openDeleteModal, setOpenDeleteModal] = useState(false);
   const [selectedRow, setSelectedRow] = useState(null);
   const [isExcelImportOpen, setIsExcelImportOpen] = useState(false);
@@ -358,19 +361,29 @@ const Example = () => {
      
 
       {
+        accessorKey: 'branch',
+        header: 'Branch',
+        muiEditTextFieldProps: {
+          required: isBranchManagement,
+          error: !!validationErrors?.branch,
+          helperText: validationErrors?.branch,
+        },
+      },
+      {
         accessorKey: 'roles',
         header: 'Roles',
         editVariant: 'select',
-        editSelectOptions: roles,
+        // Branch_Management may only create Admins; everyone else keeps the full list.
+        editSelectOptions: isBranchManagement ? ['Admin'] : roles,
         muiEditTextFieldProps: {
           select: true,
           error: !!validationErrors?.roles,
           helperText: validationErrors?.roles,
         },
       },
-      
+
     ],
-    [validationErrors],
+    [validationErrors, isBranchManagement],
   );
 
   const { mutateAsync: createUser, isPending: isCreatingUser } = useCreateUser(refetch);
@@ -378,6 +391,23 @@ const Example = () => {
   const { mutateAsync: deleteUser, isPending: isDeletingUser } = useDeleteUser(refetch);
 
   const handleCreateUser = async ({ values, table }) => {
+    if (isBranchManagement) {
+      // Branch_Management creates Admins only: only user (name) + branch are
+      // needed; email is derived and the role is forced to Admin server-side.
+      const errs = {};
+      if (!values.user) errs.user = 'Name is Required';
+      if (!values.branch) errs.branch = 'Branch is Required';
+      if (Object.keys(errs).length) { setValidationErrors(errs); return; }
+      setValidationErrors({});
+      await createUser({
+        user: values.user,
+        email: values.email || `${values.user}@zemenbank.com`,
+        branch: values.branch,
+        roles: ['Admin'],
+      });
+      table.setCreatingRow(null);
+      return;
+    }
     const newValidationErrors = validateUser(values);
     if (Object.values(newValidationErrors).some((error) => error)) {
       setValidationErrors(newValidationErrors);
@@ -567,16 +597,24 @@ function getAccessToken() {
 
 function useCreateUser(refetch) {
   const queryClient = useQueryClient();
+  const role = useSelector((state) => state.user.role);
   return useMutation({
     mutationFn: async (user) => {
+      // Branch_Management uses the clean /create_admin path (no RMS site_id) and
+      // may only create Admins; everyone else uses the existing /signUp.
+      const isBM = role === 'Branch_Management';
+      const url = isBM ? `${API_BASE_URL}/api/create_admin` : `${API_BASE_URL}/api/signUp/`;
+      const payload = isBM
+        ? { user: user.user, email: user.email, branch: user.branch }
+        : user;
 
-      const response = await fetch(`${API_BASE_URL}/api/signUp/`, {
+      const response = await fetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "x-access-token": getAccessToken(),
         },
-        body: JSON.stringify(user)
+        body: JSON.stringify(payload)
       });
 
       const data = await response.json()

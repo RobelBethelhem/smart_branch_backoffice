@@ -63,19 +63,26 @@ const EMPTY_BRANCH_STATS = {
   hourSlots: {}, dayCounts: {}, waitStats: { min: 0, max: 0, avg: 0 },
 };
 
-const BranchStat = ({ accessToken }) => {
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+// Optional props (used by the Branch_Management "Branches Record" view):
+//   branch, dateRange { start, end } (controlled), hideDateFilter.
+const BranchStat = ({ accessToken, branch, dateRange: controlledDateRange, hideDateFilter = false }) => {
+  const [internalStart, setInternalStart] = useState('');
+  const [internalEnd, setInternalEnd] = useState('');
+  const startDate = controlledDateRange ? (controlledDateRange.start || '') : internalStart;
+  const endDate = controlledDateRange ? (controlledDateRange.end || '') : internalEnd;
+  const setStartDate = setInternalStart;
+  const setEndDate = setInternalEnd;
 
-  // Stats computed on the SERVER over the full (date-filtered) set and returned
+  // Stats computed on the SERVER over the (date/branch-filtered) set and returned
   // as a small aggregates object (faithful port of the previous client logic),
   // so the browser no longer downloads the entire transactions array.
   const { data: stats = EMPTY_BRANCH_STATS, isLoading } = useQuery({
-    queryKey: ['branch-stats-branchstat', startDate, endDate],
+    queryKey: ['branch-stats-branchstat', startDate, endDate, branch],
     queryFn: async () => {
       const url = new URL(`${API_BASE_URL}/api/zsmart_branch_requests/branch_transactions_stats`, window.location.origin);
       if (startDate) url.searchParams.set('from', startDate);
       if (endDate) url.searchParams.set('to', endDate);
+      if (branch) url.searchParams.set('branch', branch);
       const res = await fetch(url.href, {
         headers: { 'Content-Type': 'application/json', 'x-access-token': accessToken },
       });
@@ -83,7 +90,7 @@ const BranchStat = ({ accessToken }) => {
       if (!res.ok || json.error) throw new Error(json.message || 'Failed to load statistics');
       return json.data;
     },
-    enabled: !!accessToken,
+    enabled: !!accessToken && (hideDateFilter ? !!branch : true),
   });
 
   const waitStats = stats.waitStats || { min: 0, max: 0, avg: 0 };
@@ -183,7 +190,8 @@ const BranchStat = ({ accessToken }) => {
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }}>
-      {/* Date Filter */}
+      {/* Date Filter (hidden when the parent — e.g. Branches Record — controls it) */}
+      {!hideDateFilter && (
       <Paper sx={{ p: 2, mb: 3, borderRadius: 3, display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
         <Typography variant="subtitle1" sx={{ fontWeight: 600, mr: 1 }}>Date Range:</Typography>
         <TextField label="From" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} size="small" InputLabelProps={{ shrink: true }} />
@@ -195,6 +203,7 @@ const BranchStat = ({ accessToken }) => {
           {stats.totalTransactions} transactions
         </Typography>
       </Paper>
+      )}
 
       {/* Stats Cards */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
