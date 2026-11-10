@@ -25,33 +25,36 @@ import { motion } from 'framer-motion';
 import { format } from 'date-fns';
 import { useQuery } from '@tanstack/react-query';
 import { API_BASE_URL } from 'src/config/api';
+import FitText from './FitText';
+import { formatMoney, formatCount, formatDuration, typeLabel, statusLabel } from './recordFormat';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, ChartTooltip, ChartLegend);
 
 const CHART_COLORS = ['#3498db', '#2ecc71', '#e74c3c', '#f39c12', '#9b59b6', '#1abc9c', '#e67e22', '#34495e'];
 
-// Build the formatter once instead of per-call (formatters run repeatedly
-// during chart hover/redraw).
-const CURRENCY_FORMAT = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'ETB', maximumFractionDigits: 0 });
-const formatCurrency = (amount) => CURRENCY_FORMAT.format(amount);
+const formatCurrency = formatMoney;
+// Big counts on the chart axes: 1,250,000 -> 1.3M
+const COMPACT = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 });
 
-// Mini stat card
-const MiniCard = ({ title, value, icon, color, delay = 0 }) => (
-  <Grid item xs={6} sm={4} md={3} lg={2.4}>
+// Mini stat card. The figure is fitted to the card's width (FitText), so a large amount gets
+// smaller instead of running out of the card.
+const MiniCard = ({ title, value, icon, color, hint, delay = 0 }) => (
+  <Grid item xs={6} sm={4} md={3} xl={2}>
     <motion.div
+      style={{ height: '100%' }}
       initial={{ opacity: 0, y: 15 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, delay }}
     >
-      <Paper sx={{
-        p: 2.5, borderRadius: 2, textAlign: 'center',
+      <Paper title={hint} sx={{
+        p: { xs: 1.5, sm: 2.5 }, borderRadius: 2, textAlign: 'center', height: '100%', minWidth: 0,
         borderTop: `3px solid ${color}`,
         '&:hover': { transform: 'translateY(-3px)', boxShadow: '0 6px 20px rgba(0,0,0,0.1)' },
         transition: 'all 0.3s ease',
       }}>
         <Box sx={{ color, mb: 1 }}>{icon}</Box>
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>{title}</Typography>
-        <Typography variant="h6" sx={{ fontWeight: 700 }}>{value}</Typography>
+        <FitText max={20} min={11}>{value}</FitText>
       </Paper>
     </motion.div>
   </Grid>
@@ -61,11 +64,16 @@ const EMPTY_BRANCH_STATS = {
   totalTransactions: 0, totalAmount: 0, maxAmount: 0, minAmount: 0, avgAmount: 0,
   incomingAmount: 0, outgoingAmount: 0, typeCounts: {}, statusCounts: {},
   hourSlots: {}, dayCounts: {}, waitStats: { min: 0, max: 0, avg: 0 },
+  turnaroundStats: { min: 0, max: 0, avg: 0, count: 0 }, completedCount: 0,
 };
 
-// Optional props (used by the Branch_Management "Branches Record" view):
-//   branch, dateRange { start, end } (controlled), hideDateFilter.
-const BranchStat = ({ accessToken, branch, dateRange: controlledDateRange, hideDateFilter = false }) => {
+// Optional props:
+//   branch, dateRange { start, end } (controlled), hideDateFilter (the parent shows the dates),
+//   requireBranch (wait for a branch before loading; defaults to hideDateFilter, which is how
+//   the "Branches Record" view has always used it).
+const BranchStat = ({
+  accessToken, branch, dateRange: controlledDateRange, hideDateFilter = false, requireBranch = hideDateFilter,
+}) => {
   const [internalStart, setInternalStart] = useState('');
   const [internalEnd, setInternalEnd] = useState('');
   const startDate = controlledDateRange ? (controlledDateRange.start || '') : internalStart;
@@ -76,7 +84,7 @@ const BranchStat = ({ accessToken, branch, dateRange: controlledDateRange, hideD
   // Stats computed on the SERVER over the (date/branch-filtered) set and returned
   // as a small aggregates object (faithful port of the previous client logic),
   // so the browser no longer downloads the entire transactions array.
-  const { data: stats = EMPTY_BRANCH_STATS, isLoading } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ['branch-stats-branchstat', startDate, endDate, branch],
     queryFn: async () => {
       const url = new URL(`${API_BASE_URL}/api/zsmart_branch_requests/branch_transactions_stats`, window.location.origin);
@@ -90,11 +98,13 @@ const BranchStat = ({ accessToken, branch, dateRange: controlledDateRange, hideD
       if (!res.ok || json.error) throw new Error(json.message || 'Failed to load statistics');
       return json.data;
     },
-    enabled: !!accessToken && (hideDateFilter ? !!branch : true),
+    enabled: !!accessToken && (requireBranch ? !!branch : true),
   });
+  const stats = useMemo(() => ({ ...EMPTY_BRANCH_STATS, ...(data || {}) }), [data]);
 
   const waitStats = stats.waitStats || { min: 0, max: 0, avg: 0 };
   const avgAmount = stats.avgAmount || 0;
+  const turnaround = stats.turnaroundStats || { avg: 0, count: 0 };
 
   // Sort hour slots for proper chart display
   const sortedHourSlots = useMemo(() => {
@@ -136,7 +146,7 @@ const BranchStat = ({ accessToken, branch, dateRange: controlledDateRange, hideD
     }],
   };
 
-  const typeLabels = Object.keys(stats.typeCounts).map(k => k.charAt(0).toUpperCase() + k.slice(1).replace(/-/g, ' '));
+  const typeLabels = Object.keys(stats.typeCounts).map(typeLabel);
   const typeData = {
     labels: typeLabels,
     datasets: [{
@@ -147,7 +157,7 @@ const BranchStat = ({ accessToken, branch, dateRange: controlledDateRange, hideD
     }],
   };
 
-  const statusLabels = Object.keys(stats.statusCounts).map(k => k.charAt(0).toUpperCase() + k.slice(1).replace(/_/g, ' '));
+  const statusLabels = Object.keys(stats.statusCounts).map(statusLabel);
   const statusData = {
     labels: statusLabels,
     datasets: [{
@@ -164,7 +174,7 @@ const BranchStat = ({ accessToken, branch, dateRange: controlledDateRange, hideD
     plugins: { legend: { display: false } },
     scales: {
       x: { title: { display: true, text: xLabel }, grid: { display: false } },
-      y: { title: { display: true, text: yLabel }, ticks: { precision: 0 }, beginAtZero: true },
+      y: { title: { display: true, text: yLabel }, ticks: { precision: 0, callback: (value) => COMPACT.format(value) }, beginAtZero: true },
     },
   });
 
@@ -200,31 +210,37 @@ const BranchStat = ({ accessToken, branch, dateRange: controlledDateRange, hideD
           <Button variant="outlined" size="small" onClick={() => { setStartDate(''); setEndDate(''); }}>Clear</Button>
         )}
         <Typography variant="body2" sx={{ ml: 'auto', color: 'text.secondary' }}>
-          {stats.totalTransactions} transactions
+          {formatCount(stats.totalTransactions)} requests
         </Typography>
       </Paper>
       )}
 
       {/* Stats Cards */}
-      <Grid container spacing={2} sx={{ mb: 3 }}>
-        <MiniCard title="Min Wait" value={`${waitStats.min} min`} icon={<ScheduleIcon />} color="#2ecc71" delay={0} />
-        <MiniCard title="Avg Wait" value={`${waitStats.avg} min`} icon={<AccessTimeIcon />} color="#3498db" delay={0.05} />
-        <MiniCard title="Max Wait" value={`${waitStats.max} min`} icon={<ScheduleIcon />} color="#e74c3c" delay={0.1} />
-        <MiniCard title="Transactions" value={stats.totalTransactions} icon={<ReceiptIcon />} color="#9b59b6" delay={0.15} />
-        <MiniCard title="Total Amount" value={formatCurrency(stats.totalAmount)} icon={<AttachMoneyIcon />} color="#f39c12" delay={0.2} />
-        <MiniCard title="Avg Amount" value={formatCurrency(avgAmount)} icon={<AttachMoneyIcon />} color="#1abc9c" delay={0.25} />
-        <MiniCard title="Max Amount" value={formatCurrency(stats.maxAmount)} icon={<TrendingUpIcon />} color="#e67e22" delay={0.3} />
-        <MiniCard title="Min Amount" value={formatCurrency(stats.minAmount)} icon={<TrendingDownIcon />} color="#34495e" delay={0.35} />
-        <MiniCard title="Incoming" value={formatCurrency(stats.incomingAmount)} icon={<TrendingUpIcon />} color="#27ae60" delay={0.4} />
-        <MiniCard title="Outgoing" value={formatCurrency(stats.outgoingAmount)} icon={<TrendingDownIcon />} color="#c0392b" delay={0.45} />
+      <Grid container spacing={2} sx={{ mb: 1.5 }}>
+        <MiniCard title="Min Wait for a Teller" value={formatDuration(waitStats.min)} hint="Shortest time from the request to a teller being assigned" icon={<ScheduleIcon />} color="#2ecc71" delay={0} />
+        <MiniCard title="Avg Wait for a Teller" value={formatDuration(waitStats.avg)} hint="Average time from the request to a teller being assigned" icon={<AccessTimeIcon />} color="#3498db" delay={0.05} />
+        <MiniCard title="Max Wait for a Teller" value={formatDuration(waitStats.max)} hint="Longest time from the request to a teller being assigned" icon={<ScheduleIcon />} color="#e74c3c" delay={0.1} />
+        <MiniCard title="Avg Time to Complete" value={turnaround.count ? formatDuration(turnaround.avg) : '—'} hint="Average time from the request to posting, for completed requests" icon={<AccessTimeIcon />} color="#8e44ad" delay={0.15} />
+        <MiniCard title="Requests" value={formatCount(stats.totalTransactions)} hint="All requests in the period, whatever their status" icon={<ReceiptIcon />} color="#9b59b6" delay={0.2} />
+        <MiniCard title="Completed" value={formatCount(stats.completedCount)} hint="Posted to FlexCube: posted, authorized or audited" icon={<ReceiptIcon />} color="#1e8449" delay={0.25} />
+        <MiniCard title="Completed Amount" value={formatCurrency(stats.totalAmount)} hint="Total of the completed requests" icon={<AttachMoneyIcon />} color="#f39c12" delay={0.3} />
+        <MiniCard title="Avg Amount" value={formatCurrency(avgAmount)} hint="Average completed request" icon={<AttachMoneyIcon />} color="#1abc9c" delay={0.35} />
+        <MiniCard title="Max Amount" value={formatCurrency(stats.maxAmount)} hint="Largest completed request" icon={<TrendingUpIcon />} color="#e67e22" delay={0.4} />
+        <MiniCard title="Min Amount" value={formatCurrency(stats.minAmount)} hint="Smallest completed request" icon={<TrendingDownIcon />} color="#34495e" delay={0.45} />
+        <MiniCard title="Incoming" value={formatCurrency(stats.incomingAmount)} hint="Completed deposits and transfers into this branch" icon={<TrendingUpIcon />} color="#27ae60" delay={0.5} />
+        <MiniCard title="Outgoing" value={formatCurrency(stats.outgoingAmount)} hint="Completed withdrawals, e-cheques, other-bank transfers and transfers out" icon={<TrendingDownIcon />} color="#c0392b" delay={0.55} />
       </Grid>
+
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 3 }}>
+        Amounts count completed requests only (posted, authorized or audited). Busy hours and days count every request.
+      </Typography>
 
       {/* Charts */}
       <Grid container spacing={3} sx={{ mb: 3 }}>
         <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 3, borderRadius: 3, boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+          <Paper sx={{ p: { xs: 2, sm: 3 }, borderRadius: 3, boxShadow: '0 2px 12px rgba(0,0,0,0.06)', minWidth: 0, overflow: 'hidden' }}>
             <Typography variant="h6" sx={{ fontWeight: 600, color: '#2c3e50', mb: 2 }}>Busy Hours</Typography>
-            <Box sx={{ height: 280 }}>
+            <Box sx={{ height: 280, position: 'relative', minWidth: 0 }}>
               {sortedHourSlots.length > 0 ? (
                 <Bar data={busyHoursData} options={chartOptions('Time Range', 'Requests')} />
               ) : <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: 'text.secondary' }}>No data</Box>}
@@ -232,9 +248,9 @@ const BranchStat = ({ accessToken, branch, dateRange: controlledDateRange, hideD
           </Paper>
         </Grid>
         <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 3, borderRadius: 3, boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+          <Paper sx={{ p: { xs: 2, sm: 3 }, borderRadius: 3, boxShadow: '0 2px 12px rgba(0,0,0,0.06)', minWidth: 0, overflow: 'hidden' }}>
             <Typography variant="h6" sx={{ fontWeight: 600, color: '#2c3e50', mb: 2 }}>Busy Days</Typography>
-            <Box sx={{ height: 280 }}>
+            <Box sx={{ height: 280, position: 'relative', minWidth: 0 }}>
               {orderedDays.length > 0 ? (
                 <Bar data={busyDaysData} options={chartOptions('Day of Week', 'Requests')} />
               ) : <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: 'text.secondary' }}>No data</Box>}
@@ -242,9 +258,9 @@ const BranchStat = ({ accessToken, branch, dateRange: controlledDateRange, hideD
           </Paper>
         </Grid>
         <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 3, borderRadius: 3, boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+          <Paper sx={{ p: { xs: 2, sm: 3 }, borderRadius: 3, boxShadow: '0 2px 12px rgba(0,0,0,0.06)', minWidth: 0, overflow: 'hidden' }}>
             <Typography variant="h6" sx={{ fontWeight: 600, color: '#2c3e50', mb: 2 }}>Transaction Types</Typography>
-            <Box sx={{ height: 280 }}>
+            <Box sx={{ height: 280, position: 'relative', minWidth: 0 }}>
               {typeLabels.length > 0 ? (
                 <Pie data={typeData} options={pieOptions} />
               ) : <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: 'text.secondary' }}>No data</Box>}
@@ -252,9 +268,9 @@ const BranchStat = ({ accessToken, branch, dateRange: controlledDateRange, hideD
           </Paper>
         </Grid>
         <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 3, borderRadius: 3, boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+          <Paper sx={{ p: { xs: 2, sm: 3 }, borderRadius: 3, boxShadow: '0 2px 12px rgba(0,0,0,0.06)', minWidth: 0, overflow: 'hidden' }}>
             <Typography variant="h6" sx={{ fontWeight: 600, color: '#2c3e50', mb: 2 }}>By Status</Typography>
-            <Box sx={{ height: 280 }}>
+            <Box sx={{ height: 280, position: 'relative', minWidth: 0 }}>
               {statusLabels.length > 0 ? (
                 <Doughnut data={statusData} options={pieOptions} />
               ) : <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: 'text.secondary' }}>No data</Box>}
@@ -265,7 +281,7 @@ const BranchStat = ({ accessToken, branch, dateRange: controlledDateRange, hideD
 
       {/* Status Summary Table */}
       {Object.keys(stats.statusCounts).length > 0 && (
-        <Paper sx={{ p: 3, borderRadius: 3, boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+        <Paper sx={{ p: { xs: 2, sm: 3 }, borderRadius: 3, boxShadow: '0 2px 12px rgba(0,0,0,0.06)', minWidth: 0 }}>
           <Typography variant="h6" sx={{ fontWeight: 600, color: '#2c3e50', mb: 2 }}>Status Summary</Typography>
           <Box sx={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -280,10 +296,10 @@ const BranchStat = ({ accessToken, branch, dateRange: controlledDateRange, hideD
                 {Object.entries(stats.statusCounts).map(([status, count], i) => (
                   <tr key={status} style={{ backgroundColor: i % 2 === 0 ? '#f8f9fa' : 'white' }}>
                     <td style={{ padding: '10px 16px', borderBottom: '1px solid #eee' }}>
-                      {status.charAt(0).toUpperCase() + status.slice(1).replace(/_/g, ' ')}
+                      {statusLabel(status)}
                     </td>
                     <td style={{ padding: '10px 16px', textAlign: 'center', borderBottom: '1px solid #eee', fontWeight: 600 }}>
-                      {count}
+                      {formatCount(count)}
                     </td>
                     <td style={{ padding: '10px 16px', textAlign: 'right', borderBottom: '1px solid #eee', color: '#7f8c8d' }}>
                       {stats.totalTransactions > 0 ? ((count / stats.totalTransactions) * 100).toFixed(1) : 0}%

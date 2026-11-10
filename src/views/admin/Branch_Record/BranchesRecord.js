@@ -11,6 +11,7 @@ import { format } from 'date-fns';
 import { API_BASE_URL } from 'src/config/api';
 import StatisticsTab from './stat';
 import BranchStat from './BranchStat';
+import { typeLabel, statusLabel } from './recordFormat';
 
 // ===========================================================================
 // Branches Record — a supervisory, cross-branch view for the Branch_Management
@@ -42,7 +43,7 @@ const formatDateTime = (v) => {
 };
 const formatAmount = (a) => {
   const n = Number(a);
-  return isNaN(n) ? '0' : n.toLocaleString('en-US');
+  return isNaN(n) ? '0' : n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
 const BranchesRecordInner = () => {
@@ -95,11 +96,11 @@ const BranchesRecordInner = () => {
   const totalRowCount = tableData?.meta?.totalRowCount ?? 0;
 
   const columns = useMemo(() => [
-    { accessorKey: 'transactionType', header: 'Type', Cell: ({ cell }) => (cell.getValue() || '').replace(/_/g, ' ') },
+    { accessorKey: 'transactionType', header: 'Type', Cell: ({ cell }) => typeLabel(cell.getValue()) },
     { accessorKey: 'account_number', header: 'Account Number' },
     { accessorKey: 'acc_holder_name', header: 'Account Holder' },
     { accessorKey: 'amount_in_figures', header: 'Amount', Cell: ({ cell }) => formatAmount(cell.getValue()) },
-    { accessorKey: 'status', header: 'Status', Cell: ({ cell }) => <Chip size="small" label={cell.getValue() || '—'} /> },
+    { accessorKey: 'status', header: 'Status', Cell: ({ cell }) => <Chip size="small" label={cell.getValue() ? statusLabel(cell.getValue()) : '—'} /> },
     { accessorKey: 'posted_by', header: 'Posted By' },
     { accessorKey: 'request_date', header: 'Request Date', Cell: ({ cell }) => formatDateTime(cell.getValue()) },
   ], []);
@@ -146,6 +147,9 @@ const BranchesRecordInner = () => {
             <Tabs
               value={activeTab}
               onChange={(e, v) => setActiveTab(v)}
+              variant="scrollable"
+              scrollButtons="auto"
+              allowScrollButtonsMobile
               sx={{ '& .MuiTab-root': { fontSize: '1rem', fontWeight: 'bold', textTransform: 'none', minWidth: 120 } }}
             >
               <Tab label="Transactions" />

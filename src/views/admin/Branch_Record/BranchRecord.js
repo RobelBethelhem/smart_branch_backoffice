@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { MaterialReactTable } from 'material-react-table';
 import {
   Box,
@@ -13,6 +13,7 @@ import {
   IconButton,
   styled,
   TextField,
+  Chip,
 } from '@mui/material';
 import {
   LocalAtm as LocalAtmIcon,
@@ -40,6 +41,8 @@ import { format } from 'date-fns';
 import StatisticsTab from './stat';
 import BranchStat from './BranchStat';
 import { ReceiptPreviewDialog } from './TransactionReceipt';
+import PeriodBar from './PeriodBar';
+import { typeLabel, statusLabel, isNotServed } from './recordFormat';
 import { API_BASE_URL } from 'src/config/api';
 
 // Create QueryClient OUTSIDE component to prevent recreation on every render.
@@ -89,7 +92,7 @@ const formatDateTime = (dateString) => {
 
 const formatAmount = (amount) => {
   const num = Number(amount);
-  return isNaN(num) ? '0' : num.toLocaleString('en-US');
+  return isNaN(num) ? '0' : num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
 const getRequestTypeInfo = (type) => {
@@ -100,10 +103,16 @@ const getRequestTypeInfo = (type) => {
       return { color: '#e74c3c', icon: <AccountBalanceWalletIcon sx={{ fontSize: 20 }} />, label: 'Withdraw' };
     case 'transfer':
       return { color: '#2ecc71', icon: <SwapHorizIcon sx={{ fontSize: 20 }} />, label: 'Transfer' };
+    // The server names these types with underscores; the hyphenated spelling is the old one.
+    case 'other_bank_transfer':
     case 'other-bank-transfer':
       return { color: '#f39c12', icon: <AccountBalanceIcon sx={{ fontSize: 20 }} />, label: 'Other Bank Transfer' };
+    case 'echeck':
+      return { color: '#8e44ad', icon: <AccountBalanceWalletIcon sx={{ fontSize: 20 }} />, label: 'E-Cheque' };
+    case 'air_ticket_payment':
+      return { color: '#16a085', icon: <AccountBalanceIcon sx={{ fontSize: 20 }} />, label: 'Air Ticket Payment' };
     default:
-      return { color: '#95a5a6', icon: null, label: type || 'Unknown' };
+      return { color: '#95a5a6', icon: null, label: typeLabel(type) };
   }
 };
 
@@ -123,8 +132,12 @@ const getStatusInfo = (status) => {
       return { color: '#34495e', icon: <CheckCircleIcon sx={{ fontSize: 20 }} />, label: 'Audited' };
     case 'delayed':
       return { color: '#e67e22', icon: <HourglassEmptyIcon sx={{ fontSize: 20 }} />, label: 'Delayed' };
+    case 'pending_checker':
+      return { color: '#d35400', icon: <HourglassEmptyIcon sx={{ fontSize: 20 }} />, label: 'Pending Checker' };
+    case 'rejected':
+      return { color: '#7f8c8d', icon: <ErrorIcon sx={{ fontSize: 20 }} />, label: 'Rejected' };
     default:
-      return { color: '#95a5a6', icon: null, label: status || 'Unknown' };
+      return { color: '#95a5a6', icon: null, label: statusLabel(status) };
   }
 };
 
@@ -139,17 +152,28 @@ const BranchRecord = () => {
   const [receiptTransactions, setReceiptTransactions] = useState([]);
   const accessToken = useSelector((state) => state.user.accessToken);
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 25 });
+  // One period for the table and both statistics tabs. Empty = all time.
+  const [dateRange, setDateRange] = useState({ start: '', end: '' });
+
+  // A new period starts again from the first page and drops the selection (the selected rows
+  // may not be in the new period).
+  useEffect(() => {
+    setPagination((p) => (p.pageIndex === 0 ? p : { ...p, pageIndex: 0 }));
+    setRowSelection({});
+  }, [dateRange]);
 
   // Server-side paginated table fetch — one page at a time (+ the true total).
   // The charts no longer use this query; each chart tab fetches its own
   // server-computed aggregates, so the heavy full array (with images) is never
   // shipped to the browser for the dashboard.
   const { data: fetchData = {}, isError, isLoading, refetch } = useQuery({
-    queryKey: ['transactions', pagination],
+    queryKey: ['transactions', pagination, dateRange],
     queryFn: async () => {
       const url = new URL(`${API_BASE_URL}/api/zsmart_branch_requests/branch_transactions`, window.location.origin);
       url.searchParams.set('start', `${pagination.pageIndex * pagination.pageSize}`);
       url.searchParams.set('size', `${pagination.pageSize}`);
+      if (dateRange.start) url.searchParams.set('from', dateRange.start);
+      if (dateRange.end) url.searchParams.set('to', dateRange.end);
       const response = await fetch(url.href, {
         headers: { 'Content-Type': 'application/json', 'x-access-token': accessToken },
       });
@@ -207,7 +231,11 @@ const BranchRecord = () => {
     // (the legacy no-pagination path). Falls back to the current page on error.
     let rows = transactions;
     try {
-      const response = await fetch(`${API_BASE_URL}/api/zsmart_branch_requests/branch_transactions`, {
+      // Same period as the screen, so the file matches what is shown.
+      const url = new URL(`${API_BASE_URL}/api/zsmart_branch_requests/branch_transactions`, window.location.origin);
+      if (dateRange.start) url.searchParams.set('from', dateRange.start);
+      if (dateRange.end) url.searchParams.set('to', dateRange.end);
+      const response = await fetch(url.href, {
         headers: { 'Content-Type': 'application/json', 'x-access-token': accessToken },
       });
       const json = await response.json();
@@ -216,14 +244,18 @@ const BranchRecord = () => {
       /* fall back to the current page */
     }
     const exportData = rows.map(row => ({
-      'Transaction Type': row.transactionType,
+      'Transaction Type': typeLabel(row.transactionType),
+      'Reference Code': row.Customer_Unique_Number,
       'Account Number': row.account_number,
       'Account Holder': row.acc_holder_name,
       'Amount': formatAmount(row.amount_in_figures),
       'Request Date': formatDateTime(row.request_date),
       'Posted Date': formatDateTime(row.posted_date),
       'Status': row.status,
+      'Not Served (reference expired)': isNotServed(row) ? 'Yes' : '',
+      'Assigned To': row.assigned_to,
       'Posted By': row.posted_by,
+      'FlexCube Reference': row.trn_ref_no,
     }));
 
     if (type === 'xlsx') {
@@ -240,7 +272,7 @@ const BranchRecord = () => {
       link.download = `Transactions_${format(new Date(), 'yyyy-MM-dd')}.csv`;
       link.click();
     }
-  }, [transactions, accessToken]);
+  }, [transactions, accessToken, dateRange]);
 
   const handlePreviewClick = useCallback(() => {
     const selectedIds = Object.keys(rowSelection);
@@ -272,6 +304,8 @@ const BranchRecord = () => {
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
+              width: 'fit-content',
+              whiteSpace: 'nowrap',
             }}
             onClick={() => handleOpenDetail(row.original)}
           >
@@ -289,6 +323,12 @@ const BranchRecord = () => {
           </Box>
         );
       },
+    },
+    {
+      accessorKey: 'Customer_Unique_Number',
+      header: 'Reference Code',
+      enableGrouping: false,
+      Cell: ({ cell }) => <span style={{ fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{cell.getValue() || '—'}</span>,
     },
     {
       accessorKey: 'account_number',
@@ -315,10 +355,13 @@ const BranchRecord = () => {
             icon = <TrendingUpIcon sx={{ fontSize: 16 }} />;
             break;
           case 'withdraw':
+          case 'echeck':
             color = '#f44336';
             icon = <TrendingDownIcon sx={{ fontSize: 16 }} />;
             break;
+          case 'other_bank_transfer':
           case 'other-bank-transfer':
+          case 'air_ticket_payment':
             color = '#d32f2f';
             icon = <TrendingDownIcon sx={{ fontSize: 16 }} />;
             break;
@@ -331,7 +374,7 @@ const BranchRecord = () => {
         }
 
         return (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color, fontWeight: 'bold' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color, fontWeight: 'bold', whiteSpace: 'nowrap' }}>
             {icon}
             {formatAmount(amount)}
           </Box>
@@ -451,17 +494,26 @@ const BranchRecord = () => {
     {
       accessorKey: 'status',
       header: 'Status',
-      Cell: ({ cell }) => {
+      Cell: ({ cell, row }) => {
         const statusInfo = getStatusInfo(cell.getValue());
         return (
-          <div style={{
-            backgroundColor: statusInfo.color, borderRadius: '20px', padding: '6px 12px',
-            width: 'fit-content', textTransform: 'uppercase', fontSize: '0.75rem',
-            fontWeight: 'bold', color: 'white', display: 'flex', alignItems: 'center', gap: '8px',
-          }}>
-            {statusInfo.icon}
-            {statusInfo.label}
-          </div>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+            <div style={{
+              backgroundColor: statusInfo.color, borderRadius: '20px', padding: '6px 12px',
+              width: 'fit-content', textTransform: 'uppercase', fontSize: '0.75rem', whiteSpace: 'nowrap',
+              fontWeight: 'bold', color: 'white', display: 'flex', alignItems: 'center', gap: '8px',
+            }}>
+              {statusInfo.icon}
+              {statusInfo.label}
+            </div>
+            {/* Still open on a later day: the reference code no longer works. */}
+            {isNotServed(row.original) && (
+              <Chip
+                size="small" color="warning" variant="outlined" label="Not served"
+                title="This request was not served on the day it was made. Its reference code has expired; the customer has to make a new request."
+              />
+            )}
+          </Box>
         );
       },
       GroupedCell: ({ cell }) => {
@@ -473,6 +525,11 @@ const BranchRecord = () => {
           </Box>
         );
       },
+    },
+    {
+      accessorKey: 'assigned_to',
+      header: 'Assigned To',
+      Cell: ({ cell }) => <Typography variant="body2">{cell.getValue() || '—'}</Typography>,
     },
     {
       accessorKey: 'posted_by',
@@ -505,7 +562,7 @@ const BranchRecord = () => {
 
   return (
     <>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2, alignItems: 'center' }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2, alignItems: 'center', flexWrap: 'wrap', gap: 1.5 }}>
         <Button
           color="primary"
           onClick={handlePreviewClick}
@@ -518,7 +575,7 @@ const BranchRecord = () => {
             ? `Preview & Print (${Object.keys(rowSelection).length})`
             : 'Preview & Print'}
         </Button>
-        <Box sx={{ display: 'flex', gap: 2 }}>
+        <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
           <Button
             color="primary"
             onClick={() => handleExport('xlsx')}
@@ -544,10 +601,19 @@ const BranchRecord = () => {
         </Box>
       </Box>
 
+      <PeriodBar value={dateRange} onChange={setDateRange}>
+        <Typography variant="body2" sx={{ ml: { md: 'auto' }, color: 'text.secondary' }}>
+          {totalRowCount.toLocaleString('en-US')} requests
+        </Typography>
+      </PeriodBar>
+
       <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
         <Tabs
           value={activeTab}
           onChange={(e, newValue) => setActiveTab(newValue)}
+          variant="scrollable"
+          scrollButtons="auto"
+          allowScrollButtonsMobile
           sx={{ '& .MuiTab-root': { fontSize: '1rem', fontWeight: 'bold', textTransform: 'none', minWidth: 120 } }}
         >
           <Tab label="Transactions" />
@@ -608,12 +674,12 @@ const BranchRecord = () => {
         )}
         {activeTab === 1 && (
           <motion.div key="stats" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <StatisticsTab accessToken={accessToken} />
+            <StatisticsTab accessToken={accessToken} dateRange={dateRange} hideDateFilter requireBranch={false} />
           </motion.div>
         )}
         {activeTab === 2 && (
           <motion.div key="branchStat" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <BranchStat accessToken={accessToken} />
+            <BranchStat accessToken={accessToken} dateRange={dateRange} hideDateFilter requireBranch={false} />
           </motion.div>
         )}
       </AnimatePresence>
