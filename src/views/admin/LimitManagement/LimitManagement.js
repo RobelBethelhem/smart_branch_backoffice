@@ -147,7 +147,9 @@ const CustomerCategoryLimitTab = () => {
       return result.data
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['customerCategoryLimits'])
+      // v5 form. The bare-array form of v4 matches every query in v5, so each save also re-ran
+      // the FlexCube customer-categories query.
+      queryClient.invalidateQueries({ queryKey: ['customerCategoryLimits'] })
       toast.success('Customer category limit created successfully')
     },
     onError: (error) => {
@@ -175,7 +177,9 @@ const CustomerCategoryLimitTab = () => {
       return result.data
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['customerCategoryLimits'])
+      // v5 form. The bare-array form of v4 matches every query in v5, so each save also re-ran
+      // the FlexCube customer-categories query.
+      queryClient.invalidateQueries({ queryKey: ['customerCategoryLimits'] })
       toast.success('Customer category limit updated successfully')
     },
     onError: (error) => {
@@ -198,7 +202,9 @@ const CustomerCategoryLimitTab = () => {
       return result.data
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['customerCategoryLimits'])
+      // v5 form. The bare-array form of v4 matches every query in v5, so each save also re-ran
+      // the FlexCube customer-categories query.
+      queryClient.invalidateQueries({ queryKey: ['customerCategoryLimits'] })
       toast.success('Customer category limit deleted successfully')
     },
     onError: (error) => {

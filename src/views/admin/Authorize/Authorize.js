@@ -23,6 +23,7 @@ import { useSelector } from 'react-redux';
 import { motion } from 'framer-motion';
 import DetailPanel from 'src/components/DetailPanel';
 import { API_BASE_URL } from 'src/config/api';
+import { fetchAccountImages } from 'src/utils/accountImages';
 
 // Styled components for the dialog
 const StyledDialog = styled(Dialog)(({ theme }) => ({
@@ -74,8 +75,15 @@ const Example = () => {
   const handleOpenDetail = useCallback((data) => {
     const randomDirection = Math.floor(Math.random() * 2) + 1;
     setEntranceDirection(randomDirection);
-    setSelectedDetail(data);
-  }, []);
+    setSelectedDetail(data); // show immediately (transaction fields + drawn signature)
+    // Customer photo and specimen signature are loaded when a row is opened: the list no
+    // longer carries them for every row (they were read from FlexCube on every refresh).
+    fetchAccountImages(data?.account_number, accessToken).then((images) => {
+      if (images) {
+        setSelectedDetail((prev) => (prev && prev._id === data._id ? { ...prev, ...images } : prev));
+      }
+    });
+  }, [accessToken]);
 
   const handleConfirmationOpen = () => {
     setIsConfirmationOpen(true);
@@ -349,7 +357,17 @@ const Example = () => {
   );
 };
 
-const queryClient = new QueryClient();
+// The list is still refreshed when the user comes back to the window or the page, but not more
+// than once every few seconds: switching between this app and FlexCube used to re-run the whole
+// query on every switch, for every open tab in the bank. One retry instead of three on failure.
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5000,
+      retry: 1,
+    },
+  },
+});
 
 const ExampleWithProviders = () => (
   <QueryClientProvider client={queryClient}>

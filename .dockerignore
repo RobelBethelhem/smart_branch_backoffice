@@ -1,0 +1,22 @@
+# Local config — VITE_FINGERPRINT_WS_URL comes in as a build arg; the /api target is the
+# nginx config, not VITE_API_BASE_URL (that one only drives the Vite dev server proxy).
+.env
+.env.*
+
+# Installed / built inside the image
+node_modules
+build
+
+# Not part of the app: PM2 logs and scratch folders from the old server, template docs, CI
+y
+path
+.github
+*.log
+vite.config.*.timestamp-*.mjs
+CLAUDE.md
+README.md
+LICENSE
+
+.git
+Dockerfile
+.dockerignore

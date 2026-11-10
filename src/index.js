@@ -2,6 +2,9 @@ import React from 'react'
 import { createRoot } from 'react-dom/client'
 import { Provider } from 'react-redux'
 import 'core-js'
+// Roboto 400/700, served from this app instead of Google Fonts (no internet on branch PCs).
+import '@fontsource/roboto/400.css'
+import '@fontsource/roboto/700.css'
 
 import App from './App'
 import {store, persistor } from './store'

@@ -817,7 +817,17 @@ const Example = () => {
   );
 };
 
-const queryClient = new QueryClient();
+// The list is still refreshed when the user comes back to the window or the page, but not more
+// than once every few seconds: switching between this app and FlexCube used to re-run the whole
+// query on every switch, for every open tab in the bank. One retry instead of three on failure.
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5000,
+      retry: 1,
+    },
+  },
+});
 
 const ExampleWithProviders = () => (
   <QueryClientProvider client={queryClient}>

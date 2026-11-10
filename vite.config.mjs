@@ -31,8 +31,10 @@ export default defineConfig(({ mode }) => {
               '@coreui/utils',
             ],
             'table-vendor': ['material-react-table'],
-            'charts-vendor': ['recharts', 'chart.js', 'react-chartjs-2'],
-            'pdf-vendor': ['jspdf', 'html2canvas'],
+            // No fixed chunks for the chart and PDF libraries. Pinned to their own vendor chunks,
+            // code they share with the rest of the app ended up inside those chunks, so the
+            // first page load pulled in both (over 1 MB) although only a few lazy-loaded
+            // screens use them. Left to Rollup, they are split off with those screens.
             'xlsx-vendor': ['xlsx'],
           },
         },

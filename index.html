@@ -18,10 +18,11 @@
     <link rel="manifest" href="/manifest.json">
     <link rel="shortcut icon" href="/favicon.ico">
 
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/talkify-tts@4.0.0/dist/styles/classic-control-center/colors.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
-     <!-- Add the Talkify script here -->
-     <script src="https://cdn.jsdelivr.net/npm/talkify-tts@4.0.0/dist/talkify.min.js"></script>
+    <!--
+      Nothing is loaded from the internet: the branch PCs cannot reach it, and the page waited
+      on these requests before showing anything. Roboto (400/700) is now bundled with the app
+      (see src/index.js). The talkify script that used to be here was not used by any page.
+    -->
   </head>
   <body>
     <noscript>
