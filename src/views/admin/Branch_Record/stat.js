@@ -236,8 +236,8 @@ const StatisticsTab = ({
       {/* What happened to the requests */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
         <OutcomeTile title="Completed" count={stats.completedCount} amount={stats.totalAmount} color="#1e8449" hint="Posted to FlexCube: posted, authorized or audited" />
-        <OutcomeTile title="Pending" count={stats.pendingCount} amount={stats.pendingAmount} color="#2471a3" hint="Waiting to be served today, or waiting for a checker" />
-        <OutcomeTile title="Not served" count={stats.notServedCount} amount={stats.notServedAmount} color="#b9770e" hint="Still open after the day of the request. The reference code has expired." />
+        <OutcomeTile title="Pending" count={stats.pendingCount} amount={stats.pendingAmount} color="#2471a3" hint="Made today and waiting for a teller or a checker" />
+        <OutcomeTile title="Not served (expired)" count={stats.notServedCount} amount={stats.notServedAmount} color="#b9770e" hint="Not completed on the day of the request. The request has expired." />
         <OutcomeTile title="Rejected" count={stats.rejectedCount} amount={stats.rejectedAmount} color="#922b21" hint="Rejected by a limit check or by the checker" />
       </Grid>
 
@@ -247,13 +247,13 @@ const StatisticsTab = ({
           {stats.notServedCount > 0 && (
             <div>
               {plural(stats.notServedCount, 'request')} ({formatMoney(stats.notServedAmount)}) {stats.notServedCount === 1 ? 'was' : 'were'} not
-              served on the day {stats.notServedCount === 1 ? 'it was' : 'they were'} made. The reference code has expired; the customer has to make a new request.
+              completed on the day {stats.notServedCount === 1 ? 'it was' : 'they were'} made and {stats.notServedCount === 1 ? 'has' : 'have'} expired. The customer has to make a new request.
             </div>
           )}
           {overdueAuthorization > 0 && (
             <div>
               {plural(overdueAuthorization, 'posted transaction')} from an earlier day {overdueAuthorization === 1 ? 'is' : 'are'} still
-              not authorized. {overdueAuthorization === 1 ? 'It is' : 'They are'} no longer in the Authorizer&apos;s list, which shows today only.
+              not authorized.
             </div>
           )}
           {overdueAudit > 0 && (

@@ -13,8 +13,8 @@ import { formatMoney, formatCount, formatDuration } from './recordFormat';
 const COUNT_COLUMNS = [
   { key: 'total', label: 'Requests', hint: 'Every request this teller was given in the period' },
   { key: 'completed', label: 'Completed', hint: 'Posted to FlexCube: posted, authorized or audited' },
-  { key: 'pending', label: 'Pending', hint: 'Still waiting to be served, or waiting for a checker' },
-  { key: 'notServed', label: 'Not served', hint: 'Still open after the day of the request. The reference code has expired.', color: 'warning.dark' },
+  { key: 'pending', label: 'Pending', hint: 'Made today and waiting for the teller or a checker' },
+  { key: 'notServed', label: 'Not served', hint: 'Not completed on the day of the request. The request has expired.', color: 'warning.dark' },
   { key: 'rejected', label: 'Rejected', hint: 'Rejected by a limit check or by the checker' },
   { key: 'awaitingAuthorization', label: 'To authorize', hint: 'Posted by this teller and not yet authorized' },
 ];

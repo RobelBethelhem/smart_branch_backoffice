@@ -12,6 +12,7 @@ import {
   DialogActions,
   IconButton,
   styled,
+  Chip,
 } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
@@ -24,6 +25,7 @@ import { motion } from 'framer-motion';
 import DetailPanel from 'src/components/DetailPanel';
 import { API_BASE_URL } from 'src/config/api';
 import { fetchAccountImages } from 'src/utils/accountImages';
+import { isOverdue } from 'src/views/admin/Branch_Record/recordFormat';
 
 // Styled components for the dialog
 const StyledDialog = styled(Dialog)(({ theme }) => ({
@@ -165,6 +167,22 @@ const Example = () => {
     { accessorKey: 'account_number', header: 'Account Number' },
     { accessorKey: 'acc_holder_name', header: 'Account Holder Name' },
     { accessorKey: 'amount_in_figures', header: 'Amount' },
+    {
+      accessorKey: 'request_date',
+      header: 'Request Date',
+      Cell: ({ cell, row }) => {
+        const date = cell.getValue() ? new Date(cell.getValue()) : null;
+        return (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, whiteSpace: 'nowrap' }}>
+            {date && !Number.isNaN(date.getTime()) ? date.toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) : '—'}
+            {/* From an earlier day and still not audited. */}
+            {isOverdue(row.original) && (
+              <Chip size="small" color="error" variant="outlined" label="Overdue" title="From an earlier day and still not audited" />
+            )}
+          </Box>
+        );
+      },
+    },
     {
       accessorKey: 'status',
       header: 'Status',

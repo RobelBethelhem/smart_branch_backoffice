@@ -136,6 +136,8 @@ const getStatusInfo = (status) => {
       return { color: '#d35400', icon: <HourglassEmptyIcon sx={{ fontSize: 20 }} />, label: 'Pending Checker' };
     case 'rejected':
       return { color: '#7f8c8d', icon: <ErrorIcon sx={{ fontSize: 20 }} />, label: 'Rejected' };
+    case 'expired':
+      return { color: '#b9770e', icon: <HourglassEmptyIcon sx={{ fontSize: 20 }} />, label: 'Expired' };
     default:
       return { color: '#95a5a6', icon: null, label: statusLabel(status) };
   }
@@ -252,7 +254,7 @@ const BranchRecord = () => {
       'Request Date': formatDateTime(row.request_date),
       'Posted Date': formatDateTime(row.posted_date),
       'Status': row.status,
-      'Not Served (reference expired)': isNotServed(row) ? 'Yes' : '',
+      'Expired On': row.expired_at ? formatDateTime(row.expired_at) : (isNotServed(row) ? 'Expired' : ''),
       'Assigned To': row.assigned_to,
       'Posted By': row.posted_by,
       'FlexCube Reference': row.trn_ref_no,
@@ -506,11 +508,11 @@ const BranchRecord = () => {
               {statusInfo.icon}
               {statusInfo.label}
             </div>
-            {/* Still open on a later day: the reference code no longer works. */}
+            {/* Still open on a later day and not yet marked "expired" by the server. */}
             {isNotServed(row.original) && (
               <Chip
                 size="small" color="warning" variant="outlined" label="Not served"
-                title="This request was not served on the day it was made. Its reference code has expired; the customer has to make a new request."
+                title="This request was not completed on the day it was made. It has expired; the customer has to make a new request."
               />
             )}
           </Box>

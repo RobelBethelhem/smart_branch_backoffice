@@ -42,6 +42,7 @@ const STATUS_LABELS = {
   audited: 'Audited',
   delayed: 'Delayed',
   rejected: 'Rejected',
+  expired: 'Expired',
 };
 
 const tidy = (key) => {
@@ -52,12 +53,20 @@ const tidy = (key) => {
 export const typeLabel = (type) => TYPE_LABELS[String(type || '').toLowerCase()] || tidy(type);
 export const statusLabel = (status) => STATUS_LABELS[String(status || '').toLowerCase()] || tidy(status);
 
-// A request that is still open on a later day than the one it was made. Its reference code
-// stopped working at midnight, so no teller can serve it any more (same rule as the server's
-// statistics: utils/rms/branchStats.js in the backend).
-const EXPIRING_STATUSES = ['requested', 'assigned', 'assigned_by_csr', 'delayed'];
+// A request is valid until the end of the day it was made. The server then gives it the status
+// "expired" (utils/rms/requestExpiry.js in the backend). This is the same rule for a row the
+// server has not marked yet: still open on a later day.
+const EXPIRING_STATUSES = ['requested', 'assigned', 'assigned_by_csr', 'delayed', 'pending_checker'];
 export const isNotServed = (row, now = new Date()) => {
   if (!row || !EXPIRING_STATUSES.includes(row.status) || !row.request_date) return false;
+  const startOfToday = new Date(now);
+  startOfToday.setHours(0, 0, 0, 0);
+  return new Date(row.request_date) < startOfToday;
+};
+
+// A posted or authorized transaction from an earlier day whose next step is still open.
+export const isOverdue = (row, now = new Date()) => {
+  if (!row || !row.request_date) return false;
   const startOfToday = new Date(now);
   startOfToday.setHours(0, 0, 0, 0);
   return new Date(row.request_date) < startOfToday;
