@@ -25,7 +25,8 @@ import { motion } from 'framer-motion';
 import DetailPanel from 'src/components/DetailPanel';
 import { API_BASE_URL } from 'src/config/api';
 import { fetchAccountImages } from 'src/utils/accountImages';
-import { isOverdue } from 'src/views/admin/Branch_Record/recordFormat';
+import { isOverdue, typeLabel } from 'src/views/admin/Branch_Record/recordFormat';
+import { showBulkResult } from 'src/utils/bulkActionResult';
 
 // Styled components for the dialog
 const StyledDialog = styled(Dialog)(({ theme }) => ({
@@ -51,7 +52,10 @@ const getRequestTypeColor = (type) => {
     case 'deposit': return '#3498db';
     case 'withdraw': return '#e74c3c';
     case 'transfer': return '#2ecc71';
+    // The server names these types with underscores; the hyphenated spelling is the old one.
+    case 'other_bank_transfer':
     case 'other-bank-transfer': return '#f39c12';
+    case 'echeck': return '#8e44ad';
     default: return '#95a5a6';
   }
 };
@@ -111,23 +115,11 @@ const Example = () => {
         body: JSON.stringify({ transactions: selectedTransactions }),
       });
 
-      if (response.ok) {
-        toast.success('Transactions audited successfully!', {
-          position: "top-right",
-          autoClose: 3000,
-          hideProgressBar: false,
-          closeOnClick: true,
-          pauseOnHover: true,
-          draggable: true,
-          progress: undefined,
-          theme: "colored",
-        });
-        
-        setRowSelection({});
-        queryClient.invalidateQueries(['transactions']);
-      } else {
-        throw new Error('Failed to audit transactions');
-      }
+      // The server answers 200 even when it left out some or all of the selected rows, so the
+      // message comes from what it says it did (and why not), not from the status code.
+      await showBulkResult(response, 'audited');
+      setRowSelection({});
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
     } catch (error) {
       toast.error(error.message, {
         position: "top-right",
@@ -160,7 +152,7 @@ const Example = () => {
           }}
           onClick={() => handleOpenDetail(row.original)}
         >
-          {cell.getValue()}
+          {typeLabel(cell.getValue())}
         </motion.div>
       ),
     },
