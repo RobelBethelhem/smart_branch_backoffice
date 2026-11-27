@@ -49,6 +49,12 @@ const User = React.lazy(()=> import('./views/user/User'));
 
 const System_User_Management = React.lazy(() => import('./views/admin/System_User_Management/systemUserManagement'))
 
+// Customer 360
+const Customer360Arrivals = React.lazy(() => import('./views/customer360/Arrivals'))
+const Customer360Page = React.lazy(() => import('./views/customer360/Customer360Page'))
+const Customer360Access = React.lazy(() => import('./views/customer360/AccessSettings'))
+const Customer360Sections = React.lazy(() => import('./views/customer360/SectionManager'))
+
 const routes = [
   { path: '/', exact: true, name: 'Home' },
   { path: '/dashboard', name: 'Chat', element: Chat },
@@ -61,6 +67,32 @@ const routes = [
     name: 'Employee',
     element: System_User_Management,
     roles: ['Super_Admin', 'Branch_Management']
+  },
+
+  // Customer 360. The server decides per branch which of these roles really see it.
+  {
+    path: '/customer360',
+    name: 'Customer 360',
+    element: Customer360Arrivals,
+    roles: ['Admin', 'Authorizer', 'Auditor', 'Teller', 'Maker']
+  },
+  {
+    path: '/customer360/:arrivalId',
+    name: 'Customer',
+    element: Customer360Page,
+    roles: ['Admin', 'Authorizer', 'Auditor', 'Teller', 'Maker']
+  },
+  {
+    path: '/admin/customer360_access',
+    name: 'Customer 360 Access',
+    element: Customer360Access,
+    roles: ['Admin']
+  },
+  {
+    path: '/super_admin/customer360',
+    name: 'Customer 360 Sections',
+    element: Customer360Sections,
+    roles: ['Super_Admin']
   },
 
   {

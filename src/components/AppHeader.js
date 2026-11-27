@@ -27,6 +27,7 @@ import {
 
 import { AppBreadcrumb } from './index'
 import { AppHeaderDropdown } from './header/index'
+import ArrivalNotifier from './ArrivalNotifier'
 
 const AppHeader = () => {
   const headerRef = useRef()
@@ -70,11 +71,8 @@ const AppHeader = () => {
           </CNavItem>
         </CHeaderNav>
         <CHeaderNav className="ms-auto">
-          <CNavItem>
-            <CNavLink href="#">
-              <CIcon icon={cilBell} size="lg" />
-            </CNavLink>
-          </CNavItem>
+          {/* Customer 360: customers whose request has just got a teller */}
+          <ArrivalNotifier />
           <CNavItem>
             <CNavLink href="#">
               <CIcon icon={cilList} size="lg" />

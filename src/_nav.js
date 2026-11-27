@@ -19,7 +19,7 @@ import {
 import { CNavGroup, CNavItem, CNavTitle } from '@coreui/react'
 
 
-const _nav = (userRole) => [
+const _nav = (userRole, flags = {}) => [
   // Dashboard is the transaction-oriented landing. Branch_Management and
   // Super_Admin don't do transactions, so they don't see it.
   ...((userRole === 'Super_Admin' || userRole === 'Branch_Management') ? [] : [{
@@ -32,6 +32,15 @@ const _nav = (userRole) => [
       text: 'NEW',
     },
   }]),
+
+  // Customer 360: shown to the roles the branch Admin has switched it on for (the server says
+  // so, see components/ArrivalNotifier.js). The Admin always has it.
+  ...(flags.customer360 ? [{
+    component: CNavItem,
+    name: 'Customer 360',
+    to: '/customer360',
+    icon: <CIcon icon={cilStar} customClassName="nav-icon" />,
+  }] : []),
 
   ...(userRole === 'user' ? [
     {
@@ -245,6 +254,11 @@ const _nav = (userRole) => [
           component: CNavItem,
           name: 'Pending Checker Approval',
           to: '/authorizer/pending_checker_approval'
+        },
+        {
+          component: CNavItem,
+          name: 'Customer 360 Access',
+          to: '/admin/customer360_access'
         }
 
       ],
@@ -263,6 +277,11 @@ const _nav = (userRole) => [
         component: CNavItem,
         name: 'User Management',
         to: '/super_admin/employee'
+      },
+      {
+        component: CNavItem,
+        name: 'Customer 360 Sections',
+        to: '/super_admin/customer360'
       },
 
     ] : []),

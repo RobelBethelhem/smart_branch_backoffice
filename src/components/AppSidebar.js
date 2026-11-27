@@ -30,7 +30,8 @@ const AppSidebar = () => {
   // on every call; memoize so the recursive nav tree only rebuilds when the
   // user's role changes (effectively once per session) rather than on every
   // sidebar toggle.
-  const navigation = React.useMemo(() => _nav(userRole), [userRole])
+  const customer360 = useSelector((state) => state.customer360Eligible === true)
+  const navigation = React.useMemo(() => _nav(userRole, { customer360 }), [userRole, customer360])
 
   return (
     <CSidebar
